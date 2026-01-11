@@ -170,17 +170,6 @@ uv run python src/stockchart/fetch_prices.py
 - Historical closing prices for market indices
 - Links to indices via foreign key
 
-## Current Holdings
-
-The application currently tracks the following stocks with active positions:
-- SAAB AB (63 shares)
-- AERCAP HOLDINGS N.V. O (178 shares)
-- ASML HOLDING (31 shares)
-- LEONARDO SPA (147 shares)
-- AIRBUS GROUP (88 shares)
-- RHEINMETALL AG (43 shares)
-- SIGNATURE BANK (43 shares)
-
 ## Notes
 
 - The application uses Yahoo Finance ticker symbols mapped from ISIN codes

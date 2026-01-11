@@ -86,18 +86,18 @@ uv run invoke db-info
 Output example:
 ```
 📊 Database Information:
-  Stocks: 21
-  Transactions: 174
-  Price records: 2773
+  Stocks: 15
+  Transactions: 87
+  Price records: 1842
+  Indices: 2
+    S&P 500: 1261 price records
+    Euro Stoxx 50: 1261 price records
 
   Current Holdings:
-    SAAB AB: 63 shares
-    AERCAP HOLDINGS N.V. O: 178 shares
-    ASML HOLDING: 31 shares
-    LEONARDO SPA: 147 shares
-    AIRBUS GROUP: 88 shares
-    RHEINMETALL AG: 43 shares
-    SIGNATURE BANK: 43 shares
+    Stock A: 100 shares
+    Stock B: 50 shares
+    Stock C: 200 shares
+    ...
 ```
 
 ## Development
