@@ -23,6 +23,12 @@ ISIN_TO_TICKER = {
     "IT0003856405": {"EUR": "LDO.MI"},
     "NL0000235190": {"EUR": "AIR.PA"},
     "DE0007030009": {"EUR": "RHM.DE"},
+    # AI/Tech stocks
+    "US67066G1040": {"USD": "NVDA"},  # NVIDIA CORP
+    "US5949181045": {"USD": "MSFT"},  # MICROSOFT CORP
+    "US02079K3059": {"USD": "GOOGL"},  # ALPHABET INC-CL A
+    "US0079031078": {"USD": "AMD"},  # ADVANCED MICRO DEVICES
+    "US30303M1027": {"USD": "META"},  # META PLATFORMS INC
 }
 
 app = FastAPI(title="Stock Price Visualizer", version="0.1.0")

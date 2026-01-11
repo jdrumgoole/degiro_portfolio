@@ -17,6 +17,12 @@ ISIN_TO_TICKER = {
     "NL0000235190": {"EUR": "AIR.PA"},  # AIRBUS GROUP
     "DE0007030009": {"EUR": "RHM.DE"},  # RHEINMETALL AG
     "US82669G1040": {"USD": "SBNY"},  # SIGNATURE BANK (delisted)
+    # AI/Tech stocks
+    "US67066G1040": {"USD": "NVDA"},  # NVIDIA CORP
+    "US5949181045": {"USD": "MSFT"},  # MICROSOFT CORP
+    "US02079K3059": {"USD": "GOOGL"},  # ALPHABET INC-CL A
+    "US0079031078": {"USD": "AMD"},  # ADVANCED MICRO DEVICES
+    "US30303M1027": {"USD": "META"},  # META PLATFORMS INC
 }
 
 def get_ticker_for_stock(stock):

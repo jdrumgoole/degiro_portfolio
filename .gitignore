@@ -47,6 +47,8 @@ stockchart.log
 Transactions.xlsx
 *.xlsx
 *.xls
+# But include example data
+!example_data.xlsx
 
 # Testing
 .pytest_cache/

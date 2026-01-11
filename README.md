@@ -16,6 +16,16 @@ A web application for tracking and visualizing your DEGIRO portfolio with intera
 - Real-time portfolio overview with current holdings and valuations
 - SQLite database for efficient data storage and retrieval
 
+## Screenshots
+
+### Portfolio Overview
+![Portfolio Overview](screenshots/portfolio-overview.png)
+*Interactive portfolio dashboard showing holdings summary, stock price charts, position value percentage, investment tranche tracking, and market index comparison*
+
+### Stock Detail View
+![Stock Detail - Microsoft](screenshots/stock-detail-microsoft.png)
+*Detailed view showing Microsoft's performance with multiple chart types including price history, position value %, investment tranches, and performance vs market indices*
+
 ## Technology Stack
 
 - **Backend**: FastAPI (Python)
@@ -85,10 +95,36 @@ degiro-portfolio/
 │       └── index.html       # Frontend interface
 ├── degiro-portfolio         # CLI script for server management
 ├── tasks.py                 # Invoke tasks for automation
-├── Transactions.xlsx        # Input data file
+├── Transactions.xlsx        # Your transaction data file
+├── example_data.xlsx        # Example demo data (AI stocks)
 ├── stockchart.db            # SQLite database (generated)
 └── pyproject.toml           # Project dependencies
 ```
+
+## Example Data
+
+The repository includes `example_data.xlsx` with sample AI stock transactions for demonstration purposes. To try the application with this demo data:
+
+```bash
+# Import the example data
+uv run python -c "from src.degiro_portfolio.import_data import import_transactions; import_transactions('example_data.xlsx')"
+
+# Fetch prices for the stocks
+uv run python src/degiro_portfolio/fetch_prices.py
+
+# Fetch market indices
+uv run python src/degiro_portfolio/fetch_indices.py
+
+# Start the server
+./degiro-portfolio start
+```
+
+The example portfolio includes:
+- NVIDIA (NVDA) - 129 shares across 4 purchases
+- Microsoft (MSFT) - 30 shares across 3 purchases
+- Meta (META) - 68 shares across 2 purchases
+- Alphabet/Google (GOOGL) - 57 shares across 2 purchases
+- AMD - 97 shares across 3 purchases
 
 ## Detailed Setup
 
