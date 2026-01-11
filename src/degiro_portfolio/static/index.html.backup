@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Portfolio Visualizer</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        h1 {
+            color: #2d3748;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #718096;
+            font-size: 1.1em;
+        }
+
+        .holdings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stock-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 3px solid transparent;
+        }
+
+        .stock-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+            border-color: #667eea;
+        }
+
+        .stock-card.active {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+        }
+
+        .stock-name {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .stock-symbol {
+            color: #667eea;
+            font-weight: 600;
+            font-size: 1em;
+            margin-bottom: 12px;
+        }
+
+        .stock-shares {
+            color: #48bb78;
+            font-size: 1.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .stock-meta {
+            color: #718096;
+            font-size: 0.9em;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+
+        .chart-title {
+            font-size: 1.8em;
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        #chart {
+            width: 100%;
+            height: 600px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: #fc8181;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .info-message {
+            background: #90cdf4;
+            color: #1a365d;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+            font-size: 1.1em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-label {
+            color: #718096;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            color: #2d3748;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📊 Stock Portfolio Visualizer</h1>
+            <p class="subtitle">Historical price charts for your current holdings</p>
+        </header>
+
+        <div id="loading" class="loading">Loading portfolio data...</div>
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div id="holdings-container" style="display: none;">
+            <div class="holdings-grid" id="holdings-grid"></div>
+        </div>
+
+        <div id="chart-section" style="display: none;">
+            <div class="chart-container">
+                <div class="chart-title" id="chart-title">Select a stock to view its chart</div>
+                <div class="stats-grid" id="stats-grid"></div>
+                <div id="chart"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let holdings = [];
+        let selectedStockId = null;
+
+        // Load holdings on page load
+        async function loadHoldings() {
+            try {
+                const response = await fetch('/api/holdings');
+                const data = await response.json();
+                holdings = data.holdings;
+
+                if (holdings.length === 0) {
+                    document.getElementById('loading').innerHTML =
+                        '<div class="info-message">No current holdings found in the portfolio.</div>';
+                    return;
+                }
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('holdings-container').style.display = 'block';
+                renderHoldings();
+
+                // Auto-select first stock
+                if (holdings.length > 0) {
+                    loadStockChart(holdings[0].id);
+                }
+            } catch (error) {
+                showError('Failed to load holdings: ' + error.message);
+            }
+        }
+
+        function renderHoldings() {
+            const grid = document.getElementById('holdings-grid');
+            grid.innerHTML = holdings.map(stock => `
+                <div class="stock-card ${stock.id === selectedStockId ? 'active' : ''}"
+                     onclick="loadStockChart(${stock.id})">
+                    <div class="stock-name">${stock.name}</div>
+                    <div class="stock-symbol">${stock.symbol}</div>
+                    <div class="stock-shares">${stock.shares} shares</div>
+                    <div class="stock-meta">${stock.transactions_count} transactions</div>
+                </div>
+            `).join('');
+        }
+
+        async function loadStockChart(stockId) {
+            selectedStockId = stockId;
+            renderHoldings(); // Update active state
+
+            try {
+                const response = await fetch(`/api/stock/${stockId}/chart-data`);
+                const data = await response.json();
+
+                document.getElementById('chart-section').style.display = 'block';
+                document.getElementById('chart-title').textContent =
+                    `${data.stock.name} (${data.stock.symbol})`;
+
+                renderChart(data);
+                renderStats(data);
+            } catch (error) {
+                showError('Failed to load chart data: ' + error.message);
+            }
+        }
+
+        function renderStats(data) {
+            const prices = data.prices;
+            if (prices.length === 0) return;
+
+            const latestPrice = prices[prices.length - 1].close;
+            const oldestPrice = prices[0].close;
+            const priceChange = latestPrice - oldestPrice;
+            const priceChangePercent = ((priceChange / oldestPrice) * 100).toFixed(2);
+
+            const highPrice = Math.max(...prices.map(p => p.high));
+            const lowPrice = Math.min(...prices.map(p => p.low));
+
+            const totalShares = data.transactions.length > 0 ?
+                data.transactions[data.transactions.length - 1].shares : 0;
+
+            const statsHtml = `
+                <div class="stat-box">
+                    <div class="stat-label">Current Price</div>
+                    <div class="stat-value">€${latestPrice.toFixed(2)}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Total Change</div>
+                    <div class="stat-value" style="color: ${priceChange >= 0 ? '#48bb78' : '#fc8181'}">
+                        ${priceChange >= 0 ? '+' : ''}€${priceChange.toFixed(2)} (${priceChangePercent}%)
+                    </div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Period High</div>
+                    <div class="stat-value">€${highPrice.toFixed(2)}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Period Low</div>
+                    <div class="stat-value">€${lowPrice.toFixed(2)}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Current Holdings</div>
+                    <div class="stat-value">${totalShares} shares</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Position Value</div>
+                    <div class="stat-value">€${(latestPrice * totalShares).toFixed(2)}</div>
+                </div>
+            `;
+
+            document.getElementById('stats-grid').innerHTML = statsHtml;
+        }
+
+        function renderChart(data) {
+            const dates = data.prices.map(p => p.date);
+            const closePrices = data.prices.map(p => p.close);
+            const openPrices = data.prices.map(p => p.open);
+            const highPrices = data.prices.map(p => p.high);
+            const lowPrices = data.prices.map(p => p.low);
+
+            // Main price trace (candlestick)
+            const priceTrace = {
+                x: dates,
+                close: closePrices,
+                open: openPrices,
+                high: highPrices,
+                low: lowPrices,
+                type: 'candlestick',
+                name: 'Price',
+                increasing: { line: { color: '#48bb78' } },
+                decreasing: { line: { color: '#fc8181' } }
+            };
+
+            // Buy transactions
+            const buyTransactions = data.transactions.filter(t => t.transaction_type === 'buy');
+            const buyTrace = {
+                x: buyTransactions.map(t => t.date),
+                y: buyTransactions.map(t => t.price),
+                mode: 'markers',
+                name: 'Buy',
+                marker: {
+                    color: '#48bb78',
+                    size: buyTransactions.map(t => Math.min(10 + t.quantity / 5, 20)),
+                    symbol: 'triangle-up',
+                    line: { color: 'white', width: 2 }
+                },
+                text: buyTransactions.map(t => `Buy ${t.quantity} shares @ €${t.price.toFixed(2)}`),
+                hoverinfo: 'text'
+            };
+
+            // Sell transactions
+            const sellTransactions = data.transactions.filter(t => t.transaction_type === 'sell');
+            const sellTrace = {
+                x: sellTransactions.map(t => t.date),
+                y: sellTransactions.map(t => t.price),
+                mode: 'markers',
+                name: 'Sell',
+                marker: {
+                    color: '#fc8181',
+                    size: sellTransactions.map(t => Math.min(10 + t.quantity / 5, 20)),
+                    symbol: 'triangle-down',
+                    line: { color: 'white', width: 2 }
+                },
+                text: sellTransactions.map(t => `Sell ${t.quantity} shares @ €${t.price.toFixed(2)}`),
+                hoverinfo: 'text'
+            };
+
+            const traces = [priceTrace, buyTrace];
+            if (sellTransactions.length > 0) {
+                traces.push(sellTrace);
+            }
+
+            const layout = {
+                title: '',
+                xaxis: {
+                    title: 'Date',
+                    rangeslider: { visible: false },
+                    type: 'date'
+                },
+                yaxis: {
+                    title: 'Price (EUR)',
+                    fixedrange: false
+                },
+                hovermode: 'x unified',
+                showlegend: true,
+                legend: {
+                    x: 0,
+                    y: 1,
+                    bgcolor: 'rgba(255, 255, 255, 0.8)'
+                },
+                plot_bgcolor: '#f7fafc',
+                paper_bgcolor: 'white',
+                font: {
+                    family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif'
+                }
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['lasso2d', 'select2d']
+            };
+
+            Plotly.newPlot('chart', traces, layout, config);
+        }
+
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        // Initialize
+        loadHoldings();
+    </script>
+</body>
+</html>

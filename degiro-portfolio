@@ -1,0 +1,230 @@
+#!/usr/bin/env python
+"""
+DEGIRO Portfolio CLI - Manage the portfolio visualization application.
+
+Usage:
+    degiro-portfolio start    - Start the application server
+    degiro-portfolio stop     - Stop the application server
+    degiro-portfolio restart  - Restart the application server
+    degiro-portfolio status   - Check application status
+"""
+import os
+import sys
+import time
+import signal
+import argparse
+import subprocess
+from pathlib import Path
+
+
+# Configuration
+PROJECT_ROOT = Path(__file__).parent.absolute()
+PID_FILE = PROJECT_ROOT / ".degiro-portfolio.pid"
+LOG_FILE = PROJECT_ROOT / "degiro-portfolio.log"
+HOST = "0.0.0.0"
+PORT = 8000
+
+
+def get_pid():
+    """Get the PID of the running server from PID file."""
+    if PID_FILE.exists():
+        try:
+            pid = int(PID_FILE.read_text().strip())
+            # Check if process is actually running
+            try:
+                os.kill(pid, 0)
+                return pid
+            except OSError:
+                # Process not running, remove stale PID file
+                PID_FILE.unlink()
+                return None
+        except (ValueError, FileNotFoundError):
+            return None
+    return None
+
+
+def is_running():
+    """Check if the server is running."""
+    return get_pid() is not None
+
+
+def start_server():
+    """Start the application server."""
+    if is_running():
+        print("❌ Server is already running")
+        print(f"   PID: {get_pid()}")
+        print(f"   URL: http://localhost:{PORT}")
+        return 1
+
+    print("🚀 Starting DEGIRO Portfolio server...")
+
+    # Start the server in the background
+    cmd = [
+        "uv", "run", "uvicorn",
+        "src.degiro_portfolio.main:app",
+        "--host", HOST,
+        "--port", str(PORT)
+    ]
+
+    # Open log file for output
+    log_file = open(LOG_FILE, "w")
+
+    # Start process
+    process = subprocess.Popen(
+        cmd,
+        cwd=PROJECT_ROOT,
+        stdout=log_file,
+        stderr=subprocess.STDOUT,
+        start_new_session=True
+    )
+
+    # Save PID
+    PID_FILE.write_text(str(process.pid))
+
+    # Wait a moment and check if it started successfully
+    time.sleep(2)
+
+    if is_running():
+        print(f"✅ Server started successfully")
+        print(f"   PID: {process.pid}")
+        print(f"   URL: http://localhost:{PORT}")
+        print(f"   Logs: {LOG_FILE}")
+        return 0
+    else:
+        print("❌ Server failed to start")
+        print(f"   Check logs: {LOG_FILE}")
+        return 1
+
+
+def stop_server():
+    """Stop the application server."""
+    pid = get_pid()
+
+    if not pid:
+        print("ℹ️  Server is not running")
+        return 0
+
+    print(f"🛑 Stopping server (PID: {pid})...")
+
+    try:
+        # Send SIGTERM for graceful shutdown
+        os.kill(pid, signal.SIGTERM)
+
+        # Wait for process to terminate (up to 10 seconds)
+        for i in range(10):
+            time.sleep(0.5)
+            if not is_running():
+                break
+
+        # If still running, force kill
+        if is_running():
+            print("   Forcing shutdown...")
+            os.kill(pid, signal.SIGKILL)
+            time.sleep(0.5)
+
+        # Clean up PID file
+        if PID_FILE.exists():
+            PID_FILE.unlink()
+
+        print("✅ Server stopped")
+        return 0
+
+    except ProcessLookupError:
+        # Process already dead
+        if PID_FILE.exists():
+            PID_FILE.unlink()
+        print("✅ Server stopped")
+        return 0
+    except Exception as e:
+        print(f"❌ Error stopping server: {e}")
+        return 1
+
+
+def restart_server():
+    """Restart the application server."""
+    print("🔄 Restarting server...")
+    stop_server()
+    time.sleep(1)
+    return start_server()
+
+
+def show_status():
+    """Show server status."""
+    pid = get_pid()
+
+    if pid:
+        print("✅ Server is running")
+        print(f"   PID: {pid}")
+        print(f"   URL: http://localhost:{PORT}")
+        print(f"   Logs: {LOG_FILE}")
+
+        # Show last few log lines
+        if LOG_FILE.exists():
+            print("\n📋 Recent logs:")
+            try:
+                with open(LOG_FILE, 'r') as f:
+                    lines = f.readlines()
+                    for line in lines[-5:]:
+                        print(f"   {line.rstrip()}")
+            except Exception as e:
+                print(f"   Could not read logs: {e}")
+
+        return 0
+    else:
+        print("❌ Server is not running")
+        return 1
+
+
+def main():
+    """Main CLI entry point."""
+    parser = argparse.ArgumentParser(
+        description="DEGIRO Portfolio - Portfolio Visualization Tool",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Commands:
+  start    Start the application server
+  stop     Stop the application server
+  restart  Restart the application server
+  status   Show server status
+
+Examples:
+  degiro-portfolio start
+  degiro-portfolio stop
+  degiro-portfolio restart
+  degiro-portfolio status
+        """
+    )
+
+    parser.add_argument(
+        'command',
+        choices=['start', 'stop', 'restart', 'status'],
+        help='Command to execute'
+    )
+
+    # Handle Ctrl+C
+    def signal_handler(sig, frame):
+        print("\n\n⚠️  Interrupted")
+        sys.exit(1)
+
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # Parse arguments
+    if len(sys.argv) < 2:
+        parser.print_help()
+        return 1
+
+    args = parser.parse_args()
+
+    # Execute command
+    commands = {
+        'start': start_server,
+        'stop': stop_server,
+        'restart': restart_server,
+        'status': show_status
+    }
+
+    return commands[args.command]()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

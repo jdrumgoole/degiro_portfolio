@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Portfolio Visualizer</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-content {
+            flex-grow: 1;
+        }
+
+        h1 {
+            color: #2d3748;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #718096;
+            font-size: 1.1em;
+        }
+
+        .upload-btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .upload-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+        }
+
+        .upload-btn:active {
+            transform: translateY(0);
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .upload-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 20px;
+            border-radius: 8px;
+            background: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            z-index: 1000;
+            display: none;
+        }
+
+        .upload-status.success {
+            border-left: 4px solid #48bb78;
+        }
+
+        .upload-status.error {
+            border-left: 4px solid #fc8181;
+        }
+
+        .holdings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .stock-card {
+            background: white;
+            padding: 12px 15px;
+            border-radius: 8px;
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .stock-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.15);
+            border-color: #667eea;
+        }
+
+        .stock-card.active {
+            border-color: #667eea;
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+        }
+
+        .stock-name {
+            font-size: 0.95em;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 4px;
+            line-height: 1.2;
+        }
+
+        .stock-symbol {
+            color: #667eea;
+            font-weight: 600;
+            font-size: 0.85em;
+            margin-bottom: 8px;
+        }
+
+        .stock-shares {
+            color: #48bb78;
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+
+        .stock-meta {
+            color: #718096;
+            font-size: 0.75em;
+        }
+
+        .chart-container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 30px;
+        }
+
+        .chart-title {
+            font-size: 1.8em;
+            color: #2d3748;
+            margin-bottom: 20px;
+            font-weight: 600;
+        }
+
+        #chart {
+            width: 100%;
+            height: 450px;
+            margin-bottom: 20px;
+        }
+
+        #tranche-chart {
+            width: 100%;
+            height: 450px;
+        }
+
+        #index-chart {
+            width: 100%;
+            height: 350px;
+        }
+
+        #position-percentage-chart {
+            width: 100%;
+            height: 350px;
+        }
+
+        .chart-subtitle {
+            font-size: 1.2em;
+            color: #4a5568;
+            margin: 20px 0 10px 0;
+            font-weight: 600;
+        }
+
+        .tranche-list {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f7fafc;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .tranche-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            margin-bottom: 8px;
+            background: white;
+            border-radius: 6px;
+            border-left: 4px solid;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .tranche-item:hover {
+            transform: translateX(4px);
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        .tranche-item.selected {
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+            transform: translateX(4px);
+        }
+
+        .tranche-color {
+            width: 24px;
+            height: 24px;
+            border-radius: 4px;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+
+        .tranche-details {
+            flex-grow: 1;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .tranche-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tranche-label {
+            font-weight: 700;
+            color: #667eea;
+            font-size: 0.85em;
+            margin-bottom: 2px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tranche-date {
+            font-weight: 600;
+            color: #2d3748;
+            font-size: 0.95em;
+        }
+
+        .tranche-quantity {
+            color: #718096;
+            font-size: 0.85em;
+            margin-top: 2px;
+        }
+
+        .tranche-price {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 0.95em;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: white;
+            font-size: 1.2em;
+        }
+
+        .error {
+            background: #fc8181;
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+        }
+
+        .info-message {
+            background: #90cdf4;
+            color: #1a365d;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            text-align: center;
+            font-size: 1.1em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-box {
+            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-label {
+            color: #718096;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            color: #2d3748;
+            font-size: 1.5em;
+            font-weight: bold;
+        }
+
+        .portfolio-summary {
+            background: white;
+            padding: 20px 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            margin-bottom: 20px;
+        }
+
+        .portfolio-summary h2 {
+            color: #2d3748;
+            font-size: 1.3em;
+            margin-bottom: 15px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+
+        .summary-stat {
+            text-align: center;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%);
+            border-radius: 10px;
+        }
+
+        .summary-label {
+            color: #718096;
+            font-size: 0.85em;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .summary-value {
+            color: #2d3748;
+            font-size: 1.8em;
+            font-weight: bold;
+        }
+
+        .summary-value.positive {
+            color: #48bb78;
+        }
+
+        .summary-value.negative {
+            color: #fc8181;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <h1>📊 Stock Portfolio Visualizer</h1>
+                <p class="subtitle">Historical price charts for your current holdings</p>
+            </div>
+            <div style="display: flex; gap: 12px;">
+                <button class="upload-btn" onclick="updateMarketData()">
+                    📈 Update Market Data
+                </button>
+                <input type="file" id="file-input" accept=".xlsx,.xls" />
+                <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+                    📤 Upload Transactions
+                </button>
+            </div>
+        </header>
+
+        <div id="upload-status" class="upload-status"></div>
+
+        <div id="loading" class="loading">Loading portfolio data...</div>
+        <div id="error" class="error" style="display: none;"></div>
+
+        <div id="portfolio-summary" class="portfolio-summary" style="display: none;">
+            <h2>Portfolio Summary</h2>
+            <div class="summary-grid" id="summary-grid"></div>
+        </div>
+
+        <div id="holdings-container" style="display: none;">
+            <div class="holdings-grid" id="holdings-grid"></div>
+        </div>
+
+        <div id="chart-section" style="display: none;">
+            <div class="chart-container">
+                <div class="chart-title" id="chart-title">Select a stock to view its chart</div>
+                <div class="stats-grid" id="stats-grid"></div>
+                <div class="chart-subtitle">Stock Price</div>
+                <div id="chart"></div>
+                <div class="chart-subtitle">Position Value %</div>
+                <div id="position-percentage-chart"></div>
+                <div class="chart-subtitle">Investment Tranche Values</div>
+                <div id="tranche-chart"></div>
+                <div id="tranche-list" class="tranche-list"></div>
+                <div class="chart-subtitle">Performance vs. Market Indices</div>
+                <div id="index-chart"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let holdings = [];
+        let selectedStockId = null;
+
+        // Currency utility functions
+        function getCurrencySymbol(currency) {
+            const symbols = {
+                'USD': '$',
+                'EUR': '€',
+                'GBP': '£',
+                'JPY': '¥',
+                'SEK': 'kr',
+                'NOK': 'kr',
+                'DKK': 'kr',
+                'CHF': 'CHF',
+                'CAD': 'C$',
+                'AUD': 'A$'
+            };
+            return symbols[currency] || currency;
+        }
+
+        function formatPrice(price, currency) {
+            const symbol = getCurrencySymbol(currency);
+            const formattedNumber = price.toLocaleString('en-US', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            if (['USD', 'EUR', 'GBP'].includes(currency)) {
+                return `${symbol}${formattedNumber}`;
+            } else {
+                return `${formattedNumber} ${symbol}`;
+            }
+        }
+
+        // Load portfolio summary
+        async function loadPortfolioSummary() {
+            try {
+                let totalInvestment = 0;
+                let currentValue = 0;
+                let stockCount = 0;
+
+                for (const holding of holdings) {
+                    // Fetch transactions and prices for each holding
+                    const [transResp, priceResp] = await Promise.all([
+                        fetch(`/api/stock/${holding.id}/transactions`),
+                        fetch(`/api/stock/${holding.id}/prices`)
+                    ]);
+
+                    const transData = await transResp.json();
+                    const priceData = await priceResp.json();
+
+                    // Calculate weighted average cost per share for CURRENTLY HELD shares
+                    const buyTransactions = transData.transactions.filter(t => t.quantity > 0);
+
+                    if (buyTransactions.length > 0) {
+                        // Total amount spent on buys (in EUR)
+                        const totalSpent = buyTransactions.reduce((sum, t) => sum + Math.abs(t.total_eur), 0);
+                        // Total shares bought
+                        const totalSharesBought = buyTransactions.reduce((sum, t) => sum + t.quantity, 0);
+                        // Average cost per share
+                        const avgCostPerShare = totalSpent / totalSharesBought;
+
+                        // Investment for currently held shares only
+                        const investment = avgCostPerShare * holding.shares;
+                        totalInvestment += investment;
+                    }
+
+                    // Get current price
+                    if (priceData.prices.length > 0) {
+                        const latestPrice = priceData.prices[priceData.prices.length - 1].close;
+                        // We need to convert to EUR - for now, we'll use the total_eur / quantity from last transaction as rough conversion
+                        // This is approximate - ideally we'd have live exchange rates
+                        const lastTrans = transData.transactions[transData.transactions.length - 1];
+                        const approxEurPerShare = Math.abs(lastTrans.total_eur) / Math.abs(lastTrans.quantity);
+                        currentValue += holding.shares * approxEurPerShare;
+                    }
+
+                    stockCount++;
+                }
+
+                const gainLoss = currentValue - totalInvestment;
+                const gainLossPercent = totalInvestment > 0 ? ((gainLoss / totalInvestment) * 100) : 0;
+
+                // Render summary
+                const summaryHtml = `
+                    <div class="summary-stat">
+                        <div class="summary-label">Total Holdings</div>
+                        <div class="summary-value">${stockCount} stocks</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="summary-label">Original Investment</div>
+                        <div class="summary-value">€${totalInvestment.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="summary-label">Current Value</div>
+                        <div class="summary-value">€${currentValue.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</div>
+                    </div>
+                    <div class="summary-stat">
+                        <div class="summary-label">Total Gain/Loss</div>
+                        <div class="summary-value ${gainLoss >= 0 ? 'positive' : 'negative'}">
+                            ${gainLoss >= 0 ? '+' : ''}€${Math.abs(gainLoss).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                            <div style="font-size: 0.6em; margin-top: 5px;">
+                                ${gainLoss >= 0 ? '+' : ''}${gainLossPercent.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+                document.getElementById('summary-grid').innerHTML = summaryHtml;
+                document.getElementById('portfolio-summary').style.display = 'block';
+
+            } catch (error) {
+                console.error('Failed to load portfolio summary:', error);
+            }
+        }
+
+        // Load holdings on page load
+        async function loadHoldings() {
+            try {
+                const response = await fetch('/api/holdings');
+                const data = await response.json();
+                holdings = data.holdings;
+
+                if (holdings.length === 0) {
+                    document.getElementById('loading').innerHTML =
+                        '<div class="info-message">No current holdings found in the portfolio.</div>';
+                    return;
+                }
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('holdings-container').style.display = 'block';
+                renderHoldings();
+
+                // Load portfolio summary
+                loadPortfolioSummary();
+
+                // Auto-select first stock
+                if (holdings.length > 0) {
+                    loadStockChart(holdings[0].id);
+                }
+            } catch (error) {
+                showError('Failed to load holdings: ' + error.message);
+            }
+        }
+
+        function renderHoldings() {
+            const grid = document.getElementById('holdings-grid');
+            grid.innerHTML = holdings.map(stock => `
+                <div class="stock-card ${stock.id === selectedStockId ? 'active' : ''}"
+                     onclick="loadStockChart(${stock.id})">
+                    <div class="stock-name">${stock.name}</div>
+                    <div class="stock-symbol">${stock.symbol}</div>
+                    <div class="stock-shares">${stock.shares} shares</div>
+                    <div class="stock-meta">${stock.transactions_count} transactions</div>
+                </div>
+            `).join('');
+        }
+
+        async function loadStockChart(stockId) {
+            selectedStockId = stockId;
+            renderHoldings(); // Update active state
+
+            try {
+                const response = await fetch(`/api/stock/${stockId}/chart-data`);
+                const data = await response.json();
+
+                document.getElementById('chart-section').style.display = 'block';
+                document.getElementById('chart-title').textContent =
+                    `${data.stock.name} (${data.stock.symbol})`;
+
+                renderChart(data);
+                renderStats(data);
+            } catch (error) {
+                showError('Failed to load chart data: ' + error.message);
+            }
+        }
+
+        function renderStats(data) {
+            const prices = data.prices;
+            if (prices.length === 0) return;
+
+            const currency = data.stock.currency;
+            const latestPrice = prices[prices.length - 1].close;
+
+            // Find the first purchase date
+            const buyTransactions = data.transactions.filter(t => t.transaction_type === 'buy');
+            let oldestPrice = prices[0].close;
+
+            if (buyTransactions.length > 0) {
+                // Sort by date to find the earliest purchase
+                const firstPurchaseDate = buyTransactions[0].date;
+
+                // Find the price closest to or on the first purchase date
+                const purchasePrice = prices.find(p => p.date >= firstPurchaseDate);
+                if (purchasePrice) {
+                    oldestPrice = purchasePrice.close;
+                }
+            }
+
+            const priceChange = latestPrice - oldestPrice;
+            const priceChangePercent = ((priceChange / oldestPrice) * 100).toFixed(2);
+
+            const highPrice = Math.max(...prices.map(p => p.high));
+            const lowPrice = Math.min(...prices.map(p => p.low));
+
+            const totalShares = data.transactions.length > 0 ?
+                data.transactions[data.transactions.length - 1].shares : 0;
+
+            const statsHtml = `
+                <div class="stat-box">
+                    <div class="stat-label">Current Price</div>
+                    <div class="stat-value">${formatPrice(latestPrice, currency)}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Change Since First Purchase</div>
+                    <div class="stat-value" style="color: ${priceChange >= 0 ? '#48bb78' : '#fc8181'}">
+                        ${priceChange >= 0 ? '+' : ''}${formatPrice(Math.abs(priceChange), currency)} (${priceChangePercent}%)
+                    </div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Period High</div>
+                    <div class="stat-value">${formatPrice(highPrice, currency)}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Period Low</div>
+                    <div class="stat-value">${formatPrice(lowPrice, currency)}</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Current Holdings</div>
+                    <div class="stat-value">${totalShares} shares</div>
+                </div>
+                <div class="stat-box">
+                    <div class="stat-label">Position Value</div>
+                    <div class="stat-value">${formatPrice(latestPrice * totalShares, currency)}</div>
+                </div>
+            `;
+
+            document.getElementById('stats-grid').innerHTML = statsHtml;
+        }
+
+        function renderChart(data) {
+            const currency = data.stock.currency;
+            const latestPrice = data.prices.length > 0 ? data.prices[data.prices.length - 1].close : 0;
+            const dates = data.prices.map(p => p.date);
+            const closePrices = data.prices.map(p => p.close);
+            const openPrices = data.prices.map(p => p.open);
+            const highPrices = data.prices.map(p => p.high);
+            const lowPrices = data.prices.map(p => p.low);
+
+            // ========================================
+            // CHART 1: Price Chart (Candlestick)
+            // ========================================
+
+            // Main price trace (candlestick)
+            const priceTrace = {
+                x: dates,
+                close: closePrices,
+                open: openPrices,
+                high: highPrices,
+                low: lowPrices,
+                type: 'candlestick',
+                name: 'Price',
+                increasing: { line: { color: '#48bb78' } },
+                decreasing: { line: { color: '#fc8181' } }
+            };
+
+            // Buy transactions
+            const buyTransactions = data.transactions.filter(t => t.transaction_type === 'buy');
+            const buyTrace = {
+                x: buyTransactions.map(t => t.date),
+                y: buyTransactions.map(t => t.price),
+                mode: 'markers',
+                name: 'Buy',
+                marker: {
+                    color: '#48bb78',
+                    size: buyTransactions.map(t => Math.min(16 + t.quantity / 3, 28)),
+                    symbol: 'triangle-up',
+                    line: { color: 'white', width: 3 }
+                },
+                text: buyTransactions.map(t => `Buy ${t.quantity} shares @ ${formatPrice(t.price, t.currency)}`),
+                hoverinfo: 'text'
+            };
+
+            // Sell transactions
+            const sellTransactions = data.transactions.filter(t => t.transaction_type === 'sell');
+            const sellTrace = {
+                x: sellTransactions.map(t => t.date),
+                y: sellTransactions.map(t => t.price),
+                mode: 'markers',
+                name: 'Sell',
+                marker: {
+                    color: '#fc8181',
+                    size: sellTransactions.map(t => Math.min(16 + t.quantity / 3, 28)),
+                    symbol: 'triangle-down',
+                    line: { color: 'white', width: 3 }
+                },
+                text: sellTransactions.map(t => `Sell ${t.quantity} shares @ ${formatPrice(t.price, t.currency)}`),
+                hoverinfo: 'text'
+            };
+
+            const priceTraces = [priceTrace, buyTrace];
+            if (sellTransactions.length > 0) {
+                priceTraces.push(sellTrace);
+            }
+
+            const priceLayout = {
+                title: '',
+                xaxis: {
+                    title: '',
+                    rangeslider: { visible: false },
+                    type: 'date'
+                },
+                yaxis: {
+                    title: `Price (${currency})`,
+                    fixedrange: false
+                },
+                hovermode: 'x unified',
+                showlegend: true,
+                legend: {
+                    x: 0,
+                    y: 1.1,
+                    orientation: 'h',
+                    bgcolor: 'rgba(255, 255, 255, 0.9)'
+                },
+                plot_bgcolor: '#f7fafc',
+                paper_bgcolor: 'white',
+                margin: { b: 40, t: 10 },
+                font: {
+                    family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif'
+                }
+            };
+
+            const config = {
+                responsive: true,
+                displayModeBar: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['lasso2d', 'select2d']
+            };
+
+            Plotly.newPlot('chart', priceTraces, priceLayout, config);
+
+            // ========================================
+            // CHART 2: Tranche Value Chart
+            // ========================================
+
+            const trancheTraces = [];
+            const trancheColors = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#43e97b', '#fa709a', '#fee140'];
+
+            // Sort buy transactions by date for consistent ordering
+            const sortedBuyTransactions = [...buyTransactions].sort((a, b) =>
+                new Date(a.date) - new Date(b.date)
+            );
+
+            // Pre-assign colors and prepare transaction data
+            const trancheData = sortedBuyTransactions.map((buyTrans, idx) => {
+                const buyDate = buyTrans.date;
+                const buyPrice = buyTrans.price;
+                const quantity = buyTrans.quantity;
+                const color = trancheColors[idx % trancheColors.length];
+
+                // Create arrays for dates and values starting from buy date
+                const trancheDates = [];
+                const trancheValues = [];
+
+                // Find all prices from buy date onwards
+                data.prices.forEach(p => {
+                    if (p.date >= buyDate) {
+                        trancheDates.push(p.date);
+                        // Value = current price * quantity in this tranche
+                        trancheValues.push(p.close * quantity);
+                    }
+                });
+
+                return {
+                    buyTrans,
+                    buyDate,
+                    buyPrice,
+                    quantity,
+                    color,
+                    trancheDates,
+                    trancheValues,
+                    trancheNumber: idx + 1
+                };
+            });
+
+            // Create traces only for tranches with price data
+            trancheData.forEach(td => {
+                if (td.trancheValues.length > 0) {
+                    const trancheTrace = {
+                        x: td.trancheDates,
+                        y: td.trancheValues,
+                        mode: 'lines',
+                        name: `Tranche ${td.trancheNumber} (${td.quantity} @ ${formatPrice(td.buyPrice, td.buyTrans.currency)})`,
+                        line: {
+                            color: td.color,
+                            width: 2.5
+                        },
+                        hovertemplate: `<b>Tranche ${td.trancheNumber}</b><br>` +
+                                      `Value: ${getCurrencySymbol(currency)}%{y:.2f}<br>` +
+                                      `Date: %{x}<extra></extra>`
+                    };
+
+                    trancheTraces.push(trancheTrace);
+                }
+            });
+
+            const trancheLayout = {
+                title: '',
+                xaxis: {
+                    title: 'Date',
+                    type: 'date'
+                },
+                yaxis: {
+                    title: `Investment Value (${currency})`,
+                    fixedrange: false
+                },
+                hovermode: 'x unified',
+                showlegend: true,
+                legend: {
+                    x: 0,
+                    y: 1.15,
+                    orientation: 'h',
+                    bgcolor: 'rgba(255, 255, 255, 0.9)'
+                },
+                plot_bgcolor: '#f7fafc',
+                paper_bgcolor: 'white',
+                margin: { t: 10 },
+                font: {
+                    family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif'
+                }
+            };
+
+            Plotly.newPlot('tranche-chart', trancheTraces, trancheLayout, config);
+
+            // ========================================
+            // Tranche List
+            // ========================================
+
+            let trancheListHtml = '';
+
+            // Create mapping from tranche number to trace index
+            const trancheToTraceMap = {};
+            let traceIndex = 0;
+            trancheData.forEach((td, idx) => {
+                if (td.trancheValues.length > 0) {
+                    trancheToTraceMap[idx] = traceIndex;
+                    traceIndex++;
+                }
+            });
+
+            trancheData.forEach((td, idx) => {
+                const date = new Date(td.buyDate).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+
+                // Find current value of this tranche
+                const currentValue = latestPrice * td.quantity;
+                const purchaseValue = td.buyPrice * td.quantity;
+                const trancheGain = currentValue - purchaseValue;
+                const trancheGainPercent = ((trancheGain / purchaseValue) * 100).toFixed(2);
+
+                trancheListHtml += `
+                    <div class="tranche-item" data-tranche-index="${idx}" style="border-left-color: ${td.color}">
+                        <div class="tranche-color" style="background-color: ${td.color}"></div>
+                        <div class="tranche-details">
+                            <div class="tranche-info">
+                                <div class="tranche-label">Tranche ${td.trancheNumber}</div>
+                                <div class="tranche-date">${date}</div>
+                                <div class="tranche-quantity">${td.quantity} shares @ ${formatPrice(td.buyPrice, td.buyTrans.currency)}</div>
+                            </div>
+                            <div class="tranche-info" style="text-align: right;">
+                                <div class="tranche-price">${formatPrice(currentValue, currency)}</div>
+                                <div class="tranche-quantity" style="color: ${trancheGain >= 0 ? '#48bb78' : '#fc8181'}">
+                                    ${trancheGain >= 0 ? '+' : ''}${formatPrice(Math.abs(trancheGain), currency)} (${trancheGainPercent}%)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            document.getElementById('tranche-list').innerHTML = trancheListHtml;
+
+            // Add click handlers for tranche highlighting
+            const trancheItems = document.querySelectorAll('.tranche-item');
+            let selectedTrancheIndex = null;
+
+            trancheItems.forEach(item => {
+                item.addEventListener('click', function() {
+                    const trancheIndex = parseInt(this.getAttribute('data-tranche-index'));
+                    const traceIndex = trancheToTraceMap[trancheIndex];
+
+                    // Skip if this tranche doesn't have a corresponding trace
+                    if (traceIndex === undefined) {
+                        return;
+                    }
+
+                    // Toggle selection
+                    if (selectedTrancheIndex === trancheIndex) {
+                        // Deselect - restore all traces to normal
+                        selectedTrancheIndex = null;
+                        trancheItems.forEach(ti => ti.classList.remove('selected'));
+
+                        // Reset all traces
+                        const updates = {
+                            'line.width': Array(trancheTraces.length).fill(2.5),
+                            'opacity': Array(trancheTraces.length).fill(1)
+                        };
+                        Plotly.restyle('tranche-chart', updates);
+                    } else {
+                        // Select this tranche
+                        selectedTrancheIndex = trancheIndex;
+                        trancheItems.forEach(ti => ti.classList.remove('selected'));
+                        this.classList.add('selected');
+
+                        // Highlight selected trace, dim others
+                        const lineWidths = trancheTraces.map((_, i) => i === traceIndex ? 4 : 1.5);
+                        const opacities = trancheTraces.map((_, i) => i === traceIndex ? 1 : 0.3);
+
+                        const updates = {
+                            'line.width': lineWidths,
+                            'opacity': opacities
+                        };
+                        Plotly.restyle('tranche-chart', updates);
+                    }
+                });
+            });
+
+            // ========================================
+            // CHART 3: Position Value % Chart
+            // ========================================
+
+            if (data.position_percentage && data.position_percentage.length > 0) {
+                const posPercentDates = data.position_percentage.map(p => p.date);
+                const posPercentValues = data.position_percentage.map(p => p.percentage);
+
+                const posPercentTrace = {
+                    x: posPercentDates,
+                    y: posPercentValues,
+                    mode: 'lines',
+                    name: 'Position Value',
+                    line: {
+                        color: '#667eea',
+                        width: 3
+                    },
+                    fill: 'tozeroy',
+                    fillcolor: 'rgba(102, 126, 234, 0.2)',
+                    hovertemplate: `<b>Position Value</b><br>` +
+                                  `%{y:.2f}%<br>` +
+                                  `Date: %{x}<extra></extra>`
+                };
+
+                const posPercentLayout = {
+                    height: 350,
+                    xaxis: {
+                        title: 'Date',
+                        type: 'date',
+                        gridcolor: '#e2e8f0'
+                    },
+                    yaxis: {
+                        title: 'Position Value (%)',
+                        gridcolor: '#e2e8f0',
+                        zeroline: false
+                    },
+                    hovermode: 'x unified',
+                    showlegend: false,
+                    plot_bgcolor: '#f7fafc',
+                    paper_bgcolor: 'white',
+                    margin: { t: 10 },
+                    font: {
+                        family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif'
+                    },
+                    shapes: [{
+                        type: 'line',
+                        x0: posPercentDates[0],
+                        x1: posPercentDates[posPercentDates.length - 1],
+                        y0: 100,
+                        y1: 100,
+                        line: {
+                            color: '#e53e3e',
+                            width: 2,
+                            dash: 'dash'
+                        }
+                    }],
+                    annotations: [{
+                        x: posPercentDates[Math.floor(posPercentDates.length / 2)],
+                        y: 100,
+                        text: '100% (Break Even)',
+                        showarrow: false,
+                        yshift: -15,
+                        font: {
+                            size: 10,
+                            color: '#e53e3e'
+                        }
+                    }]
+                };
+
+                Plotly.newPlot('position-percentage-chart', [posPercentTrace], posPercentLayout, config);
+            }
+
+            // ========================================
+            // CHART 4: Index Comparison Chart
+            // ========================================
+
+            if (data.indices && data.indices.length > 0 && data.stock_normalized) {
+                const indexTraces = [];
+
+                // Add stock normalized performance
+                const stockDates = data.stock_normalized.map(s => s.date);
+                const stockNormalized = data.stock_normalized.map(s => s.normalized);
+
+                const stockTrace = {
+                    x: stockDates,
+                    y: stockNormalized,
+                    mode: 'lines',
+                    name: data.stock.name,
+                    line: {
+                        color: '#667eea',
+                        width: 3
+                    },
+                    hovertemplate: `<b>${data.stock.name}</b><br>` +
+                                  `Change: %{y:.2f}%<br>` +
+                                  `Date: %{x}<extra></extra>`
+                };
+                indexTraces.push(stockTrace);
+
+                // Add index traces
+                const indexColors = ['#48bb78', '#fc8181'];  // Green for S&P, Red for Euro Stoxx
+                data.indices.forEach((index, idx) => {
+                    const indexDates = index.data.map(d => d.date);
+                    const indexValues = index.data.map(d => d.normalized);
+
+                    const indexTrace = {
+                        x: indexDates,
+                        y: indexValues,
+                        mode: 'lines',
+                        name: index.name,
+                        line: {
+                            color: indexColors[idx] || '#718096',
+                            width: 2,
+                            dash: 'dash'
+                        },
+                        hovertemplate: `<b>${index.name}</b><br>` +
+                                      `Change: %{y:.2f}%<br>` +
+                                      `Date: %{x}<extra></extra>`
+                    };
+                    indexTraces.push(indexTrace);
+                });
+
+                const indexLayout = {
+                    height: 350,
+                    xaxis: {
+                        title: 'Date',
+                        gridcolor: '#e2e8f0'
+                    },
+                    yaxis: {
+                        title: 'Percentage Change (%)',
+                        gridcolor: '#e2e8f0',
+                        zeroline: true,
+                        zerolinecolor: '#cbd5e0',
+                        zerolinewidth: 2
+                    },
+                    hovermode: 'x unified',
+                    showlegend: true,
+                    legend: {
+                        x: 0,
+                        y: 1.15,
+                        orientation: 'h',
+                        bgcolor: 'rgba(255, 255, 255, 0.9)'
+                    },
+                    plot_bgcolor: '#f7fafc',
+                    paper_bgcolor: 'white',
+                    margin: { t: 10 },
+                    font: {
+                        family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif'
+                    }
+                };
+
+                Plotly.newPlot('index-chart', indexTraces, indexLayout, config);
+            }
+        }
+
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+
+        function showUploadStatus(message, isSuccess) {
+            const statusDiv = document.getElementById('upload-status');
+            statusDiv.textContent = message;
+            statusDiv.className = 'upload-status ' + (isSuccess ? 'success' : 'error');
+            statusDiv.style.display = 'block';
+
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // Handle file upload
+        document.getElementById('file-input').addEventListener('change', async function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+
+            try {
+                showUploadStatus('Uploading and processing file...', true);
+
+                const response = await fetch('/api/upload-transactions', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showUploadStatus(result.message, true);
+                    // Reload the page after successful upload
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    showUploadStatus(result.message, false);
+                }
+            } catch (error) {
+                showUploadStatus('Error uploading file: ' + error.message, false);
+            }
+
+            // Reset file input
+            e.target.value = '';
+        });
+
+        // Update market data function
+        async function updateMarketData() {
+            try {
+                showUploadStatus('Fetching latest market data...', true);
+
+                const response = await fetch('/api/update-market-data', {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showUploadStatus(result.message, true);
+                    // Reload page after successful update
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    showUploadStatus(result.message, false);
+                }
+            } catch (error) {
+                showUploadStatus('Error updating market data: ' + error.message, false);
+            }
+        }
+
+        // Initialize
+        loadHoldings();
+    </script>
+</body>
+</html>
