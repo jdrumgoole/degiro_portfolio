@@ -4,9 +4,9 @@ from datetime import datetime
 import yfinance as yf
 
 try:
-    from src.degiro_portfolio.database import SessionLocal, init_db, Index, IndexPrice
-except ModuleNotFoundError:
-    from database import SessionLocal, init_db, Index, IndexPrice
+    from .database import SessionLocal, init_db, Index, IndexPrice
+except ImportError:
+    from degiro_portfolio.database import SessionLocal, init_db, Index, IndexPrice
 
 
 INDICES = {

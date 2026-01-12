@@ -6,9 +6,9 @@ from typing import Optional, List, Tuple
 import pandas as pd
 
 try:
-    from src.degiro_portfolio.config import Config
-except ModuleNotFoundError:
-    from config import Config
+    from .config import Config
+except ImportError:
+    from degiro_portfolio.config import Config
 
 
 class PriceFetcher:

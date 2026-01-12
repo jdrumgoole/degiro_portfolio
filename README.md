@@ -96,6 +96,29 @@ uv run invoke clean          # Clean generated files
 uv run invoke --list         # Show all available tasks
 ```
 
+## Testing
+
+The project includes a comprehensive Playwright-based test suite covering UI, API endpoints, and interactive features.
+
+```bash
+# Run all tests
+uv run pytest tests/ -v
+
+# Run specific test file
+uv run pytest tests/test_portfolio_overview.py -v
+
+# Run with output visible
+uv run pytest tests/ -v -s
+```
+
+**Test Coverage:**
+- Portfolio overview page (17 tests)
+- Stock charts and visualizations (15 tests)
+- API endpoints (14 tests)
+- Interactive features (19 tests)
+
+See [tests/README.md](tests/README.md) for detailed testing documentation.
+
 ## Project Structure
 
 ```
@@ -109,11 +132,18 @@ degiro-portfolio/
 │   ├── main.py              # FastAPI application
 │   └── static/
 │       └── index.html       # Frontend interface
+├── tests/
+│   ├── conftest.py          # Pytest fixtures
+│   ├── test_portfolio_overview.py  # UI tests
+│   ├── test_stock_charts.py        # Chart tests
+│   ├── test_api_endpoints.py       # API tests
+│   ├── test_interactive_features.py # Interaction tests
+│   └── README.md            # Testing documentation
 ├── degiro-portfolio         # CLI script for server management
 ├── tasks.py                 # Invoke tasks for automation
 ├── Transactions.xlsx        # Your transaction data file
-├── example_data.xlsx        # Example demo data (AI stocks)
-├── degiro-portfolio.db            # SQLite database (generated)
+├── example_data.xlsx        # Example demo data (AI & European stocks)
+├── degiro-portfolio.db      # SQLite database (generated)
 └── pyproject.toml           # Project dependencies
 ```
 

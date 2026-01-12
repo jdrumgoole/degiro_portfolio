@@ -2,13 +2,13 @@
 import yfinance as yf
 from datetime import datetime, timedelta
 try:
-    from src.degiro_portfolio.database import SessionLocal, Stock, StockPrice, Transaction
-    from src.degiro_portfolio.config import Config
-    from src.degiro_portfolio.price_fetchers import get_price_fetcher
-except ModuleNotFoundError:
-    from database import SessionLocal, Stock, StockPrice, Transaction
-    from config import Config
-    from price_fetchers import get_price_fetcher
+    from .database import SessionLocal, Stock, StockPrice, Transaction
+    from .config import Config
+    from .price_fetchers import get_price_fetcher
+except ImportError:
+    from degiro_portfolio.database import SessionLocal, Stock, StockPrice, Transaction
+    from degiro_portfolio.config import Config
+    from degiro_portfolio.price_fetchers import get_price_fetcher
 from sqlalchemy import func
 
 # NOTE: Hard-coded ticker mappings have been replaced by automatic resolution
@@ -30,9 +30,9 @@ def get_ticker_for_stock(stock):
     print(f"  ⚠️  No ticker found for {stock.name} ({stock.isin}), attempting to resolve...")
 
     try:
-        from ticker_resolver import get_ticker_for_stock as resolve_ticker
+        from .ticker_resolver import get_ticker_for_stock as resolve_ticker
     except ImportError:
-        from src.degiro_portfolio.ticker_resolver import get_ticker_for_stock as resolve_ticker
+        from degiro_portfolio.ticker_resolver import get_ticker_for_stock as resolve_ticker
 
     ticker = resolve_ticker(stock.isin, stock.name, stock.currency)
 

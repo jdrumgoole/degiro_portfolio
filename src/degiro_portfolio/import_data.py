@@ -3,15 +3,15 @@ import pandas as pd
 from datetime import datetime
 from collections import Counter
 try:
-    from src.degiro_portfolio.database import SessionLocal, init_db, Stock, Transaction, StockPrice
-    from src.degiro_portfolio.ticker_resolver import get_ticker_for_stock
-    from src.degiro_portfolio.config import Config, get_column
-    from src.degiro_portfolio.fetch_prices import fetch_stock_prices
-except ModuleNotFoundError:
-    from database import SessionLocal, init_db, Stock, Transaction, StockPrice
-    from ticker_resolver import get_ticker_for_stock
-    from config import Config, get_column
-    from fetch_prices import fetch_stock_prices
+    from .database import SessionLocal, init_db, Stock, Transaction, StockPrice
+    from .ticker_resolver import get_ticker_for_stock
+    from .config import Config, get_column
+    from .fetch_prices import fetch_stock_prices
+except ImportError:
+    from degiro_portfolio.database import SessionLocal, init_db, Stock, Transaction, StockPrice
+    from degiro_portfolio.ticker_resolver import get_ticker_for_stock
+    from degiro_portfolio.config import Config, get_column
+    from degiro_portfolio.fetch_prices import fetch_stock_prices
 
 
 def parse_date(date_str, time_str):

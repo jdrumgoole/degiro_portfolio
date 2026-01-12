@@ -13,10 +13,10 @@ import pandas as pd
 import tempfile
 import yfinance as yf
 
-from src.degiro_portfolio.database import get_db, Stock, Transaction, StockPrice, Index, IndexPrice, init_db
-from src.degiro_portfolio.config import Config, get_column
-from src.degiro_portfolio.fetch_prices import fetch_stock_prices
-from src.degiro_portfolio.price_fetchers import get_price_fetcher
+from .database import get_db, Stock, Transaction, StockPrice, Index, IndexPrice, init_db
+from .config import Config, get_column
+from .fetch_prices import fetch_stock_prices
+from .price_fetchers import get_price_fetcher
 
 # NOTE: Hard-coded ticker mappings have been replaced by automatic resolution
 # via ticker_resolver.py. Tickers are now stored in the database and resolved
