@@ -13,7 +13,7 @@ import pandas as pd
 import tempfile
 import yfinance as yf
 
-from src.degiro_portfolio.database import get_db, Stock, Transaction, StockPrice, Index, IndexPrice
+from src.degiro_portfolio.database import get_db, Stock, Transaction, StockPrice, Index, IndexPrice, init_db
 from src.degiro_portfolio.config import Config, get_column
 
 # NOTE: Hard-coded ticker mappings have been replaced by automatic resolution
@@ -21,6 +21,13 @@ from src.degiro_portfolio.config import Config, get_column
 # automatically during import. See ticker_resolver.py for manual fallback mappings.
 
 app = FastAPI(title="DEGIRO Portfolio", version="0.1.0")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on application startup."""
+    init_db()
+
 
 # Mount static files
 static_dir = os.path.join(os.path.dirname(__file__), "static")
