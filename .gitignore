@@ -54,6 +54,7 @@ Transactions.xlsx
 .pytest_cache/
 .coverage
 htmlcov/
+tests/.test_data/
 
 # Claude
 .claude/

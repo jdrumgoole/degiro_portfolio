@@ -9,6 +9,27 @@ The test suite uses:
 - **Playwright** - Browser automation for UI testing
 - **httpx** - HTTP client for API testing
 
+### Test Isolation
+
+The test suite is **completely isolated** from the production application:
+
+- **Dedicated Test Database**: `tests/.test_data/test_portfolio.db`
+  - Created fresh for each test session
+  - Automatically cleaned up after tests complete
+  - Never interferes with production `degiro-portfolio.db`
+
+- **Dedicated Test Server**: `http://127.0.0.1:8001`
+  - Runs on port **8001** (production uses **8000**)
+  - Started automatically during test session
+  - Terminated automatically after tests complete
+
+- **Isolated Environment Variables**:
+  - `DATABASE_URL` set to test database path
+  - Original environment restored after tests
+  - No cross-contamination with production settings
+
+**You can safely run tests while the production server is running!**
+
 ## Test Structure
 
 ```
