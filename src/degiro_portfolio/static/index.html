@@ -1139,7 +1139,7 @@
             formData.append('file', file);
 
             try {
-                showUploadStatus('Uploading and processing file...', true);
+                showUploadStatus('📤 Uploading transactions and fetching prices... (this may take 30-60 seconds)', true);
 
                 const response = await fetch('/api/upload-transactions', {
                     method: 'POST',
@@ -1149,13 +1149,13 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    showUploadStatus(result.message, true);
+                    showUploadStatus('✅ ' + result.message + ' - Refreshing page in 3 seconds...', true);
                     // Reload the page after successful upload
                     setTimeout(() => {
                         window.location.reload();
-                    }, 2000);
+                    }, 3000);
                 } else {
-                    showUploadStatus(result.message, false);
+                    showUploadStatus('❌ ' + result.message, false);
                 }
             } catch (error) {
                 showUploadStatus('Error uploading file: ' + error.message, false);
@@ -1168,7 +1168,7 @@
         // Update market data function
         async function updateMarketData() {
             try {
-                showUploadStatus('Fetching latest market data...', true);
+                showUploadStatus('📊 Fetching latest market data...', true);
 
                 const response = await fetch('/api/update-market-data', {
                     method: 'POST'
@@ -1177,13 +1177,13 @@
                 const result = await response.json();
 
                 if (result.success) {
-                    showUploadStatus(result.message, true);
+                    showUploadStatus('✅ ' + result.message + ' - Refreshing page in 3 seconds...', true);
                     // Reload page after successful update
                     setTimeout(() => {
                         window.location.reload();
-                    }, 2000);
+                    }, 3000);
                 } else {
-                    showUploadStatus(result.message, false);
+                    showUploadStatus('❌ ' + result.message, false);
                 }
             } catch (error) {
                 showUploadStatus('Error updating market data: ' + error.message, false);
