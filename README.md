@@ -4,17 +4,33 @@ A web application for tracking and visualizing your DEGIRO portfolio with intera
 
 ## Features
 
+### Portfolio Management
 - Import DEGIRO transaction exports from Excel spreadsheets
 - Upload new transaction files directly via web interface
 - Automatic fetching of historical stock prices using Yahoo Finance
 - One-click market data updates for all holdings
-- Interactive candlestick charts with transaction markers
+- Multi-currency support (EUR, USD, SEK) with automatic conversion
+- SQLite database for efficient data storage and retrieval
+
+### Portfolio Overview
+- Real-time portfolio summary with total value and gain/loss
+- Stock cards showing:
+  - Current holdings and share count
+  - Latest closing price with daily percentage change (▲/▼)
+  - Yahoo Finance ticker symbol (clickable → Google Finance)
+  - Exchange information
+  - Transaction count
+- Market data status showing latest price update date
+- Clickable company names linking to investor relations search
+- Compact, space-efficient design
+
+### Interactive Charts
+- Candlestick price charts with buy/sell transaction markers
 - Investment tranche tracking showing individual purchase performance
 - Position value percentage charts (where 100% = break even)
 - Market index comparison (S&P 500, Euro Stoxx 50)
-- Multi-currency support (EUR, USD, SEK)
-- Real-time portfolio overview with current holdings and valuations
-- SQLite database for efficient data storage and retrieval
+- Zoom, pan, and hover for detailed information
+- Currency-aware visualization (transactions match price data)
 
 ## Screenshots
 
@@ -178,11 +194,12 @@ uv run python src/stockchart/fetch_prices.py
 ## API Endpoints
 
 - `GET /` - Main web interface
-- `GET /api/holdings` - List all current stock holdings
+- `GET /api/holdings` - List all current stock holdings (with latest prices and daily changes)
 - `GET /api/stock/{stock_id}/prices` - Historical prices for a stock
 - `GET /api/stock/{stock_id}/transactions` - Transaction history for a stock
 - `GET /api/stock/{stock_id}/chart-data` - Combined data for chart visualization (includes position percentage)
 - `GET /api/portfolio-performance` - Portfolio-wide performance metrics
+- `GET /api/market-data-status` - Get the most recent market data update date
 - `POST /api/upload-transactions` - Upload new transaction Excel file
 - `POST /api/update-market-data` - Fetch latest market data for all stocks and indices
 
@@ -211,4 +228,7 @@ uv run python src/stockchart/fetch_prices.py
 - The application uses Yahoo Finance ticker symbols mapped from ISIN codes
 - Historical data starts from the earliest transaction date for each stock
 - Charts are interactive and support zooming, panning, and hovering for details
-- Transaction markers are sized based on the quantity traded
+- Transaction markers are uniform size for clean visualization
+- Stock cards display live prices and daily percentage changes
+- Company names and ticker symbols are clickable for quick access to external resources
+- See [PRICING_NOTES.md](PRICING_NOTES.md) for details on price data timing and differences from broker platforms

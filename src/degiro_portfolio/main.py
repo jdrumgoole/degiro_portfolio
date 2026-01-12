@@ -16,6 +16,7 @@ import yfinance as yf
 from src.degiro_portfolio.database import get_db, Stock, Transaction, StockPrice, Index, IndexPrice, init_db
 from src.degiro_portfolio.config import Config, get_column
 from src.degiro_portfolio.fetch_prices import fetch_stock_prices
+from src.degiro_portfolio.price_fetchers import get_price_fetcher
 
 # NOTE: Hard-coded ticker mappings have been replaced by automatic resolution
 # via ticker_resolver.py. Tickers are now stored in the database and resolved
@@ -39,7 +40,7 @@ if os.path.exists(static_dir):
 # Models for API responses
 class StockInfo:
     """Stock information with current holdings."""
-    def __init__(self, stock: Stock, shares: int, transactions_count: int):
+    def __init__(self, stock: Stock, shares: int, transactions_count: int, latest_price=None, price_change_pct=None, price_date=None):
         self.id = stock.id
         self.symbol = stock.symbol
         self.name = stock.name
@@ -47,6 +48,11 @@ class StockInfo:
         self.currency = stock.currency
         self.shares = shares
         self.transactions_count = transactions_count
+        self.latest_price = latest_price
+        self.price_change_pct = price_change_pct
+        self.price_date = price_date
+        self.exchange = stock.exchange
+        self.yahoo_ticker = stock.yahoo_ticker
 
     def to_dict(self):
         return {
@@ -56,7 +62,12 @@ class StockInfo:
             "isin": self.isin,
             "currency": self.currency,
             "shares": self.shares,
-            "transactions_count": self.transactions_count
+            "transactions_count": self.transactions_count,
+            "latest_price": self.latest_price,
+            "price_change_pct": self.price_change_pct,
+            "price_date": self.price_date,
+            "exchange": self.exchange,
+            "yahoo_ticker": self.yahoo_ticker
         }
 
 
@@ -80,9 +91,57 @@ async def get_holdings(db: Session = Depends(get_db)):
 
         if total_qty > 0:
             trans_count = db.query(Transaction).filter_by(stock_id=stock.id).count()
-            holdings.append(StockInfo(stock, int(total_qty), trans_count).to_dict())
+
+            # Get latest and previous prices
+            latest_price_record = db.query(StockPrice).filter_by(
+                stock_id=stock.id
+            ).order_by(StockPrice.date.desc()).first()
+
+            latest_price = None
+            price_change_pct = None
+            price_date = None
+
+            if latest_price_record:
+                latest_price = latest_price_record.close
+                price_date = latest_price_record.date.strftime("%Y-%m-%d")
+
+                # Get previous price (day before latest)
+                previous_price_record = db.query(StockPrice).filter(
+                    StockPrice.stock_id == stock.id,
+                    StockPrice.date < latest_price_record.date
+                ).order_by(StockPrice.date.desc()).first()
+
+                if previous_price_record and previous_price_record.close > 0:
+                    price_change_pct = ((latest_price - previous_price_record.close) / previous_price_record.close) * 100
+
+            holdings.append(StockInfo(
+                stock,
+                int(total_qty),
+                trans_count,
+                latest_price,
+                price_change_pct,
+                price_date
+            ).to_dict())
 
     return {"holdings": holdings}
+
+
+@app.get("/api/market-data-status")
+async def get_market_data_status(db: Session = Depends(get_db)):
+    """Get the most recent market data date."""
+    # Get most recent price date across all stocks
+    latest_price = db.query(StockPrice).order_by(StockPrice.date.desc()).first()
+
+    if latest_price:
+        return {
+            "latest_date": latest_price.date.strftime("%Y-%m-%d"),
+            "has_data": True
+        }
+    else:
+        return {
+            "latest_date": None,
+            "has_data": False
+        }
 
 
 @app.get("/api/stock/{stock_id}/prices")
@@ -497,16 +556,30 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
 
 @app.post("/api/update-market-data")
 async def update_market_data(db: Session = Depends(get_db)):
-    """Fetch latest market data for all stocks and indices."""
+    """Fetch latest market data for currently held stocks and indices."""
     try:
         updated_stocks = 0
         updated_indices = 0
         errors = []
 
-        # Update stock prices
-        stocks = db.query(Stock).all()
+        # Get price fetcher based on configuration
+        fetcher = get_price_fetcher()
+        provider = Config.PRICE_DATA_PROVIDER
 
-        for stock in stocks:
+        # Update stock prices - only for currently held stocks
+        all_stocks = db.query(Stock).all()
+
+        # Filter to stocks with current holdings
+        current_holdings = []
+        for stock in all_stocks:
+            total_qty = db.query(func.sum(Transaction.quantity)).filter_by(
+                stock_id=stock.id
+            ).scalar() or 0
+
+            if total_qty > 0:
+                current_holdings.append(stock)
+
+        for stock in current_holdings:
             try:
                 # Get ticker symbol from database
                 ticker_symbol = stock.yahoo_ticker
@@ -516,8 +589,10 @@ async def update_market_data(db: Session = Depends(get_db)):
                     continue
 
                 # Get latest price data (last 7 days to ensure we have recent data)
-                ticker = yf.Ticker(ticker_symbol)
-                hist = ticker.history(period="7d")
+                end_date = datetime.now()
+                start_date = end_date - pd.Timedelta(days=7)
+
+                hist = fetcher.fetch_prices(ticker_symbol, start_date, end_date)
 
                 if hist.empty:
                     errors.append(f"No data available for {stock.name}")
@@ -538,11 +613,11 @@ async def update_market_data(db: Session = Depends(get_db)):
                         price = StockPrice(
                             stock_id=stock.id,
                             date=price_date,
-                            open=float(row['Open']),
-                            high=float(row['High']),
-                            low=float(row['Low']),
-                            close=float(row['Close']),
-                            volume=int(row['Volume']),
+                            open=float(row['open']),
+                            high=float(row['high']),
+                            low=float(row['low']),
+                            close=float(row['close']),
+                            volume=int(row['volume']),
                             currency=stock.currency
                         )
                         db.add(price)
@@ -554,7 +629,7 @@ async def update_market_data(db: Session = Depends(get_db)):
             except Exception as e:
                 errors.append(f"Error updating {stock.name}: {str(e)}")
 
-        # Update indices
+        # Update indices (still using yfinance directly as it's always Yahoo Finance symbols)
         indices = db.query(Index).all()
         for index in indices:
             try:
@@ -591,7 +666,7 @@ async def update_market_data(db: Session = Depends(get_db)):
 
         db.commit()
 
-        message = f"Updated {updated_stocks} stocks and {updated_indices} indices"
+        message = f"Updated {updated_stocks} stocks and {updated_indices} indices using {provider}"
         if errors:
             message += f" ({len(errors)} errors)"
 

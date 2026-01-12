@@ -20,6 +20,7 @@
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             padding: 20px;
+            font-size: 14px;
         }
 
         .container {
@@ -44,22 +45,22 @@
 
         h1 {
             color: #2d3748;
-            font-size: 2.5em;
-            margin-bottom: 10px;
+            font-size: 1.8em;
+            margin-bottom: 8px;
         }
 
         .subtitle {
             color: #718096;
-            font-size: 1.1em;
+            font-size: 0.95em;
         }
 
         .upload-btn {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
             border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            font-size: 1em;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.85em;
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -123,49 +124,102 @@
         }
 
         .stock-card.active {
-            border-color: #667eea;
-            background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%);
+            border-color: #48bb78;
+            background: #f0fdf4;
+            box-shadow: 0 4px 12px rgba(72, 187, 120, 0.15);
         }
 
         .stock-name {
-            font-size: 0.95em;
+            font-size: 0.85em;
             font-weight: 600;
             color: #2d3748;
-            margin-bottom: 4px;
+            margin-bottom: 3px;
             line-height: 1.2;
+        }
+
+        .stock-name a {
+            color: #2d3748;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .stock-name a:hover {
+            color: #667eea;
+            text-decoration: underline;
         }
 
         .stock-symbol {
             color: #667eea;
             font-weight: 600;
-            font-size: 0.85em;
-            margin-bottom: 8px;
+            font-size: 0.75em;
+            margin-bottom: 2px;
+        }
+
+        .stock-ticker {
+            font-size: 0.65em;
+            margin-bottom: 2px;
+            font-family: monospace;
+        }
+
+        .stock-ticker a {
+            color: #718096;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+
+        .stock-ticker a:hover {
+            color: #667eea;
+            text-decoration: underline;
+        }
+
+        .stock-exchange {
+            color: #a0aec0;
+            font-size: 0.6em;
+            margin-bottom: 4px;
         }
 
         .stock-shares {
             color: #48bb78;
-            font-size: 1.1em;
+            font-size: 0.95em;
             font-weight: bold;
+            margin-bottom: 2px;
+        }
+
+        .stock-price {
+            font-size: 0.8em;
             margin-bottom: 3px;
+            color: #2d3748;
+        }
+
+        .stock-price .positive {
+            color: #48bb78;
+            font-weight: 600;
+            font-size: 0.75em;
+        }
+
+        .stock-price .negative {
+            color: #fc8181;
+            font-weight: 600;
+            font-size: 0.75em;
         }
 
         .stock-meta {
             color: #718096;
-            font-size: 0.75em;
+            font-size: 0.65em;
         }
 
         .chart-container {
             background: white;
-            padding: 30px;
+            padding: 20px;
             border-radius: 15px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            margin-bottom: 30px;
+            margin-bottom: 20px;
         }
 
         .chart-title {
-            font-size: 1.8em;
+            font-size: 1.3em;
             color: #2d3748;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             font-weight: 600;
         }
 
@@ -191,9 +245,9 @@
         }
 
         .chart-subtitle {
-            font-size: 1.2em;
+            font-size: 1em;
             color: #4a5568;
-            margin: 20px 0 10px 0;
+            margin: 15px 0 8px 0;
             font-weight: 600;
         }
 
@@ -279,28 +333,29 @@
 
         .loading {
             text-align: center;
-            padding: 40px;
+            padding: 30px;
             color: white;
-            font-size: 1.2em;
+            font-size: 1em;
         }
 
         .error {
             background: #fc8181;
             color: white;
-            padding: 20px;
+            padding: 15px;
             border-radius: 10px;
-            margin: 20px 0;
+            margin: 15px 0;
             text-align: center;
+            font-size: 0.9em;
         }
 
         .info-message {
             background: #90cdf4;
             color: #1a365d;
-            padding: 20px;
+            padding: 15px;
             border-radius: 10px;
-            margin: 20px 0;
+            margin: 15px 0;
             text-align: center;
-            font-size: 1.1em;
+            font-size: 0.95em;
         }
 
         .stats-grid {
@@ -319,54 +374,54 @@
 
         .stat-label {
             color: #718096;
-            font-size: 0.9em;
-            margin-bottom: 5px;
+            font-size: 0.75em;
+            margin-bottom: 4px;
         }
 
         .stat-value {
             color: #2d3748;
-            font-size: 1.5em;
+            font-size: 1.2em;
             font-weight: bold;
         }
 
         .portfolio-summary {
             background: white;
-            padding: 20px 30px;
-            border-radius: 15px;
+            padding: 10px 15px;
+            border-radius: 12px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
 
         .portfolio-summary h2 {
             color: #2d3748;
-            font-size: 1.3em;
-            margin-bottom: 15px;
+            font-size: 0.95em;
+            margin-bottom: 8px;
         }
 
         .summary-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
         }
 
         .summary-stat {
             text-align: center;
-            padding: 15px;
+            padding: 10px;
             background: linear-gradient(135deg, #667eea10 0%, #764ba210 100%);
-            border-radius: 10px;
+            border-radius: 8px;
         }
 
         .summary-label {
             color: #718096;
-            font-size: 0.85em;
-            margin-bottom: 8px;
+            font-size: 0.65em;
+            margin-bottom: 4px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
 
         .summary-value {
             color: #2d3748;
-            font-size: 1.8em;
+            font-size: 1.1em;
             font-weight: bold;
         }
 
@@ -386,14 +441,17 @@
                 <h1>📊 DEGIRO Portfolio</h1>
                 <p class="subtitle">Track and visualize your DEGIRO portfolio performance</p>
             </div>
-            <div style="display: flex; gap: 12px;">
-                <button class="upload-btn" onclick="updateMarketData()">
-                    📈 Update Market Data
-                </button>
-                <input type="file" id="file-input" accept=".xlsx,.xls" />
-                <button class="upload-btn" onclick="document.getElementById('file-input').click()">
-                    📤 Upload Transactions
-                </button>
+            <div style="display: flex; gap: 12px; flex-direction: column; align-items: flex-end;">
+                <div style="display: flex; gap: 12px;">
+                    <button class="upload-btn" onclick="updateMarketData()">
+                        📈 Update Market Data
+                    </button>
+                    <input type="file" id="file-input" accept=".xlsx,.xls" />
+                    <button class="upload-btn" onclick="document.getElementById('file-input').click()">
+                        📤 Upload Transactions
+                    </button>
+                </div>
+                <div id="market-data-status" style="font-size: 11px; color: #718096; margin-top: -4px;"></div>
             </div>
         </header>
 
@@ -529,7 +587,7 @@
                         <div class="summary-label">Total Gain/Loss</div>
                         <div class="summary-value ${gainLoss >= 0 ? 'positive' : 'negative'}">
                             ${gainLoss >= 0 ? '+' : ''}€${Math.abs(gainLoss).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}
-                            <div style="font-size: 0.6em; margin-top: 5px;">
+                            <div style="font-size: 0.55em; margin-top: 2px;">
                                 ${gainLoss >= 0 ? '+' : ''}${gainLossPercent.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}%
                             </div>
                         </div>
@@ -561,6 +619,9 @@
                 document.getElementById('holdings-container').style.display = 'block';
                 renderHoldings();
 
+                // Load market data status
+                loadMarketDataStatus();
+
                 // Load portfolio summary
                 loadPortfolioSummary();
 
@@ -573,17 +634,96 @@
             }
         }
 
+        // Helper function to get Google Finance URL from ticker
+        function getGoogleFinanceUrl(ticker, stockExchange) {
+            if (!ticker) return null;
+
+            // Map Yahoo Finance suffixes to Google Finance exchange codes
+            const tickerSuffixMap = {
+                '.ST': 'STO',      // Stockholm
+                '.MI': 'BIT',      // Milan (Borsa Italiana)
+                '.PA': 'EPA',      // Paris (Euronext)
+                '.DE': 'FRA',      // Frankfurt/XETRA
+                '.AS': 'AMS',      // Amsterdam
+                '.L': 'LON',       // London
+                '.SW': 'VTX',      // Swiss
+            };
+
+            // Map database exchange codes to Google Finance codes
+            const dbExchangeMap = {
+                'NSY': 'NYSE',     // New York Stock Exchange
+                'NAS': 'NASDAQ',   // NASDAQ
+                'TDG': 'STO',      // Stockholm (Tradegate actually, but stocks trade on Stockholm)
+                'EAM': 'AMS',      // Amsterdam (Euronext Amsterdam)
+                'EPA': 'EPA',      // Paris (Euronext Paris)
+                'XET': 'FRA',      // Frankfurt/XETRA
+            };
+
+            // Extract base symbol and exchange
+            let symbol = ticker;
+            let exchange = 'NYSE';  // Default to NYSE
+
+            // First check if ticker has a suffix
+            for (const [suffix, gfExchange] of Object.entries(tickerSuffixMap)) {
+                if (ticker.endsWith(suffix)) {
+                    symbol = ticker.replace(suffix, '');
+                    exchange = gfExchange;
+                    return `https://www.google.com/finance/quote/${symbol}:${exchange}`;
+                }
+            }
+
+            // If no suffix, use the stock's exchange from database
+            if (stockExchange && dbExchangeMap[stockExchange]) {
+                exchange = dbExchangeMap[stockExchange];
+            } else if (!ticker.includes('.')) {
+                // Default for US stocks
+                exchange = 'NYSE';
+            }
+
+            return `https://www.google.com/finance/quote/${symbol}:${exchange}`;
+        }
+
+        // Helper function to get company website search URL
+        function getCompanySearchUrl(companyName) {
+            const searchQuery = encodeURIComponent(`${companyName} investor relations`);
+            return `https://www.google.com/search?q=${searchQuery}`;
+        }
+
         function renderHoldings() {
             const grid = document.getElementById('holdings-grid');
-            grid.innerHTML = holdings.map(stock => `
-                <div class="stock-card ${stock.id === selectedStockId ? 'active' : ''}"
-                     onclick="loadStockChart(${stock.id})">
-                    <div class="stock-name">${stock.name}</div>
-                    <div class="stock-symbol">${stock.symbol}</div>
-                    <div class="stock-shares">${stock.shares} shares</div>
-                    <div class="stock-meta">${stock.transactions_count} transactions</div>
-                </div>
-            `).join('');
+            grid.innerHTML = holdings.map(stock => {
+                let priceInfo = '';
+                if (stock.latest_price !== null && stock.latest_price !== undefined) {
+                    const currencySymbol = stock.currency === 'USD' ? '$' : '€';
+                    const formattedPrice = stock.latest_price.toFixed(2);
+
+                    let changeHtml = '';
+                    if (stock.price_change_pct !== null && stock.price_change_pct !== undefined) {
+                        const changeClass = stock.price_change_pct >= 0 ? 'positive' : 'negative';
+                        const changeSymbol = stock.price_change_pct >= 0 ? '▲' : '▼';
+                        changeHtml = `<span class="${changeClass}">${changeSymbol} ${Math.abs(stock.price_change_pct).toFixed(2)}%</span>`;
+                    }
+
+                    priceInfo = `<div class="stock-price">${currencySymbol}${formattedPrice} ${changeHtml}</div>`;
+                }
+
+                // Generate URLs
+                const companyUrl = getCompanySearchUrl(stock.name);
+                const financeUrl = stock.yahoo_ticker ? getGoogleFinanceUrl(stock.yahoo_ticker, stock.exchange) : null;
+
+                return `
+                    <div class="stock-card ${stock.id === selectedStockId ? 'active' : ''}"
+                         onclick="loadStockChart(${stock.id})">
+                        <div class="stock-name"><a href="${companyUrl}" target="_blank" onclick="event.stopPropagation()">${stock.name}</a></div>
+                        <div class="stock-symbol">${stock.symbol}</div>
+                        ${stock.yahoo_ticker && financeUrl ? `<div class="stock-ticker"><a href="${financeUrl}" target="_blank" onclick="event.stopPropagation()">${stock.yahoo_ticker}</a></div>` : stock.yahoo_ticker ? `<div class="stock-ticker">${stock.yahoo_ticker}</div>` : ''}
+                        ${stock.exchange ? `<div class="stock-exchange">${stock.exchange}</div>` : ''}
+                        <div class="stock-shares">${stock.shares} shares</div>
+                        ${priceInfo}
+                        <div class="stock-meta">${stock.transactions_count} transactions</div>
+                    </div>
+                `;
+            }).join('');
         }
 
         async function loadStockChart(stockId) {
@@ -694,35 +834,46 @@
                 decreasing: { line: { color: '#fc8181' } }
             };
 
-            // Buy transactions
-            const buyTransactions = data.transactions.filter(t => t.transaction_type === 'buy');
+            // Determine the price currency from the price data
+            const priceCurrency = data.prices.length > 0 && data.prices[0].currency ? data.prices[0].currency : currency;
+
+            // Buy transactions - only show those in the same currency as price data
+            const buyTransactions = data.transactions.filter(t =>
+                t.transaction_type === 'buy' && t.currency === priceCurrency
+            );
             const buyTrace = {
                 x: buyTransactions.map(t => t.date),
                 y: buyTransactions.map(t => t.price),
                 mode: 'markers',
                 name: 'Buy',
+                yaxis: 'y',
                 marker: {
                     color: '#48bb78',
-                    size: buyTransactions.map(t => Math.min(16 + t.quantity / 3, 28)),
+                    size: 14,
                     symbol: 'triangle-up',
-                    line: { color: 'white', width: 3 }
+                    line: { color: 'white', width: 2 },
+                    opacity: 0.9
                 },
                 text: buyTransactions.map(t => `Buy ${t.quantity} shares @ ${formatPrice(t.price, t.currency)}`),
                 hoverinfo: 'text'
             };
 
-            // Sell transactions
-            const sellTransactions = data.transactions.filter(t => t.transaction_type === 'sell');
+            // Sell transactions - only show those in the same currency as price data
+            const sellTransactions = data.transactions.filter(t =>
+                t.transaction_type === 'sell' && t.currency === priceCurrency
+            );
             const sellTrace = {
                 x: sellTransactions.map(t => t.date),
                 y: sellTransactions.map(t => t.price),
                 mode: 'markers',
                 name: 'Sell',
+                yaxis: 'y',
                 marker: {
                     color: '#fc8181',
-                    size: sellTransactions.map(t => Math.min(16 + t.quantity / 3, 28)),
+                    size: 14,
                     symbol: 'triangle-down',
-                    line: { color: 'white', width: 3 }
+                    line: { color: 'white', width: 2 },
+                    opacity: 0.9
                 },
                 text: sellTransactions.map(t => `Sell ${t.quantity} shares @ ${formatPrice(t.price, t.currency)}`),
                 hoverinfo: 'text'
@@ -742,7 +893,8 @@
                 },
                 yaxis: {
                     title: `Price (${currency})`,
-                    fixedrange: false
+                    fixedrange: false,
+                    autorange: true
                 },
                 hovermode: 'x unified',
                 showlegend: true,
@@ -1164,6 +1316,30 @@
             // Reset file input
             e.target.value = '';
         });
+
+        // Load and display market data status
+        async function loadMarketDataStatus() {
+            try {
+                const response = await fetch('/api/market-data-status');
+                const data = await response.json();
+
+                const statusDiv = document.getElementById('market-data-status');
+
+                if (data.has_data && data.latest_date) {
+                    const date = new Date(data.latest_date);
+                    const formattedDate = date.toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    });
+                    statusDiv.textContent = `Latest market data: ${formattedDate}`;
+                } else {
+                    statusDiv.textContent = 'No market data available';
+                }
+            } catch (error) {
+                console.error('Failed to load market data status:', error);
+            }
+        }
 
         // Update market data function
         async function updateMarketData() {
