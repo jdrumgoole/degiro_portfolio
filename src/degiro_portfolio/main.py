@@ -14,6 +14,7 @@ import tempfile
 import yfinance as yf
 
 from src.degiro_portfolio.database import get_db, Stock, Transaction, StockPrice, Index, IndexPrice
+from src.degiro_portfolio.config import Config, get_column
 
 # NOTE: Hard-coded ticker mappings have been replaced by automatic resolution
 # via ticker_resolver.py. Tickers are now stored in the database and resolved
@@ -358,10 +359,9 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
             # Read Excel file
             df = pd.read_excel(tmp_file_path)
 
-            # Validate required columns
-            required_columns = ['Date', 'Product', 'ISIN', 'Exchange', 'Quantity', 'Price ', 'Unnamed: 8', 'Value (EUR)', 'Total (EUR)']
-            missing_columns = [col for col in required_columns if col not in df.columns]
-            if missing_columns:
+            # Validate required columns using config
+            is_valid, missing_columns = Config.validate_excel_columns(df.columns.tolist())
+            if not is_valid:
                 return JSONResponse(
                     status_code=400,
                     content={"success": False, "message": f"Missing required columns: {', '.join(missing_columns)}"}
@@ -369,8 +369,10 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
 
             # Helper function to determine native currency
             def determine_native_currency(df_data, product):
-                product_df = df_data[df_data['Product'] == product]
-                currency_counts = Counter(product_df['Unnamed: 8'].values)
+                product_col = get_column('product')
+                currency_col = get_column('currency')
+                product_df = df_data[df_data[product_col] == product]
+                currency_counts = Counter(product_df[currency_col].values)
                 if currency_counts:
                     return currency_counts.most_common(1)[0][0]
                 return "EUR"
@@ -381,16 +383,17 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
 
             for _, row in df.iterrows():
                 # Get or create stock
-                isin = row['ISIN']
+                isin = row[get_column('isin')]
                 stock = db.query(Stock).filter_by(isin=isin).first()
 
                 if not stock:
-                    native_currency = determine_native_currency(df, row['Product'])
+                    product_name = row[get_column('product')]
+                    native_currency = determine_native_currency(df, product_name)
                     stock = Stock(
-                        symbol=row['Product'].split()[0] if row['Product'] else isin,
-                        name=row['Product'],
+                        symbol=product_name.split()[0] if product_name else isin,
+                        name=product_name,
                         isin=isin,
-                        exchange=row['Exchange'],
+                        exchange=row[get_column('exchange')],
                         currency=native_currency
                     )
                     db.add(stock)
@@ -398,17 +401,18 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
                     updated_stocks += 1
 
                 # Parse date
-                if isinstance(row['Date'], str):
-                    trans_date = datetime.strptime(row['Date'], '%d-%m-%Y %H:%M')
+                date_value = row[get_column('date')]
+                if isinstance(date_value, str):
+                    trans_date = datetime.strptime(date_value, '%d-%m-%Y %H:%M')
                 else:
-                    trans_date = row['Date']
+                    trans_date = date_value
 
                 # Check if transaction already exists
                 existing_trans = db.query(Transaction).filter(
                     Transaction.stock_id == stock.id,
                     Transaction.date == trans_date,
-                    Transaction.quantity == int(row['Quantity']),
-                    Transaction.price == float(row['Price '])
+                    Transaction.quantity == int(row[get_column('quantity')]),
+                    Transaction.price == float(row[get_column('price')])
                 ).first()
 
                 if not existing_trans:
@@ -416,11 +420,11 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
                         stock_id=stock.id,
                         date=trans_date,
                         time=trans_date.strftime('%H:%M') if isinstance(trans_date, datetime) else '',
-                        quantity=int(row['Quantity']),
-                        price=float(row['Price ']),
-                        currency=row['Unnamed: 8'],
-                        value_eur=float(row['Value (EUR)']),
-                        total_eur=float(row['Total (EUR)']),
+                        quantity=int(row[get_column('quantity')]),
+                        price=float(row[get_column('price')]),
+                        currency=row[get_column('currency')],
+                        value_eur=float(row[get_column('value_eur')]),
+                        total_eur=float(row[get_column('total_eur')]),
                         venue='',
                         exchange_rate=None,
                         fees_eur=None,

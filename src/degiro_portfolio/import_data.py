@@ -5,9 +5,11 @@ from collections import Counter
 try:
     from src.degiro_portfolio.database import SessionLocal, init_db, Stock, Transaction
     from src.degiro_portfolio.ticker_resolver import get_ticker_for_stock
+    from src.degiro_portfolio.config import Config, get_column
 except ModuleNotFoundError:
     from database import SessionLocal, init_db, Stock, Transaction
     from ticker_resolver import get_ticker_for_stock
+    from config import Config, get_column
 
 
 def parse_date(date_str, time_str):
@@ -19,10 +21,13 @@ def parse_date(date_str, time_str):
 
 def determine_native_currency(df, product):
     """Determine the native/primary currency for a stock based on transactions."""
-    product_df = df[df['Product'] == product]
+    product_col = get_column('product')
+    currency_col = get_column('currency')
+
+    product_df = df[df[product_col] == product]
 
     # Count transactions by currency
-    currency_counts = Counter(product_df['Unnamed: 8'].values)
+    currency_counts = Counter(product_df[currency_col].values)
 
     # Get the most common currency
     if currency_counts:
@@ -99,34 +104,34 @@ def import_transactions(excel_file=None):
         print("Creating stocks with native currencies...")
 
         for idx, row in df.iterrows():
-            transaction_id = str(row['Unnamed: 17'])
-            transaction_currency = row['Unnamed: 8']  # Currency column
+            transaction_id = str(row[get_column('transaction_id')])
+            transaction_currency = row[get_column('currency')]
 
             # Get or create stock
             stock = get_or_create_stock(
                 session,
                 df,
-                row['Product'],
-                row['ISIN'],
-                row['Reference exchange']
+                row[get_column('product')],
+                row[get_column('isin')],
+                row[get_column('exchange')]
             )
 
             # Parse date and time
-            trans_date = parse_date(row['Date'], row['Time'])
+            trans_date = parse_date(row[get_column('date')], row[get_column('time')])
 
             # Create transaction with currency
             transaction = Transaction(
                 stock_id=stock.id,
                 date=trans_date,
-                time=row['Time'],
-                quantity=int(row['Quantity']),
-                price=float(row['Price ']),  # Note the space in column name
+                time=row[get_column('time')],
+                quantity=int(row[get_column('quantity')]),
+                price=float(row[get_column('price')]),
                 currency=transaction_currency,  # Store original currency
-                value_eur=float(row['Value EUR']),
-                total_eur=float(row['Total EUR']),
-                venue=row['Venue'],
-                exchange_rate=float(row['Exchange rate']) if pd.notna(row['Exchange rate']) else None,
-                fees_eur=float(row['Transaction and/or third party fees EUR']) if pd.notna(row['Transaction and/or third party fees EUR']) else 0.0,
+                value_eur=float(row[get_column('value_eur')]),
+                total_eur=float(row[get_column('total_eur')]),
+                venue=row[get_column('venue')],
+                exchange_rate=float(row[get_column('exchange_rate')]) if pd.notna(row[get_column('exchange_rate')]) else None,
+                fees_eur=float(row[get_column('fees_eur')]) if pd.notna(row[get_column('fees_eur')]) else 0.0,
                 transaction_id=transaction_id
             )
             session.add(transaction)

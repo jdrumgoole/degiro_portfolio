@@ -6,52 +6,52 @@ This document identifies hard-coded values in the codebase that could be made co
 
 ---
 
-## 🔴 Critical Hard-Coded Values (Should Fix)
+## ✅ RESOLVED Issues
 
-### 1. **DEGIRO-Specific Excel Column Names**
+### 1. **DEGIRO-Specific Excel Column Names** ✅
 
-**Location:** `src/degiro_portfolio/import_data.py`, `src/degiro_portfolio/main.py`
+**Status:** RESOLVED - Configuration system implemented
 
-**Hard-coded values:**
-```python
-'Unnamed: 8'  # Currency column
-'Unnamed: 17'  # Transaction ID column
-'Price '  # Note the trailing space!
-'Reference exchange'
-'Transaction and/or third party fees EUR'
-'Value (EUR)'
-'Total (EUR)'
-```
+**Implementation:** Created `src/degiro_portfolio/config.py` with:
+- `Config` class containing `DEGIRO_COLUMNS` mapping
+- `get_column()` method for safe column lookups
+- `validate_excel_columns()` for input validation
+- Environment variable support for paths and server config
 
-**Issue:** These column names are specific to DEGIRO's export format. If DEGIRO changes their export format or if someone wants to use data from another broker, the entire import process breaks.
+**Files updated:**
+- `src/degiro_portfolio/config.py` - New configuration module
+- `src/degiro_portfolio/import_data.py` - Uses `get_column()` throughout
+- `src/degiro_portfolio/main.py` - Upload endpoint uses config system
 
-**Recommendation:** Create a column mapping configuration:
+**Benefits:**
+- ✅ No hard-coded column names in business logic
+- ✅ Easy to add support for other brokers (just add new column mapping)
+- ✅ Configuration is centralized and documented
+- ✅ Validation built-in
 
-```python
-# config.py
-EXCEL_COLUMN_MAPPING = {
-    'date': 'Date',
-    'time': 'Time',
-    'product': 'Product',
-    'isin': 'ISIN',
-    'exchange': 'Reference exchange',
-    'quantity': 'Quantity',
-    'price': 'Price ',  # Note the space
-    'currency': 'Unnamed: 8',
-    'value_eur': 'Value (EUR)',
-    'total_eur': 'Total (EUR)',
-    'venue': 'Venue',
-    'exchange_rate': 'Exchange rate',
-    'fees_eur': 'Transaction and/or third party fees EUR',
-    'transaction_id': 'Unnamed: 17'
-}
-```
-
-**Priority:** HIGH - This is the biggest barrier to supporting other brokers
+See `config.py` for full implementation.
 
 ---
 
-### 2. **Market Indices Selection**
+### 2. **Database File Path and Application Title** ✅
+
+**Status:** RESOLVED
+
+**Implementation:**
+- Database renamed from `stockchart.db` to `degiro-portfolio.db`
+- Application title updated to "DEGIRO Portfolio"
+- Database path now supports environment variable `DEGIRO_PORTFOLIO_DB`
+
+**Files updated:**
+- `src/degiro_portfolio/database.py` - Updated DB_PATH
+- `src/degiro_portfolio/main.py` - Updated FastAPI title
+- `src/degiro_portfolio/static/index.html` - Updated page title and header
+
+---
+
+## 🔴 Critical Hard-Coded Values (Should Fix)
+
+### 1. **Market Indices Selection**
 
 **Location:** `src/degiro_portfolio/fetch_indices.py`
 
@@ -65,48 +65,11 @@ INDICES = {
 
 **Issue:** Users might want different benchmark indices based on their geography or investment strategy.
 
-**Recommendation:** Make indices configurable via config file or allow users to select which indices to track.
+**Status:** PARTIALLY RESOLVED - Now in `config.py` but still hard-coded. Users can modify config.py to change indices.
 
-```python
-# config.py
-DEFAULT_INDICES = {
-    "^GSPC": "S&P 500",
-    "^STOXX50E": "Euro Stoxx 50",
-    # Optional indices users can enable:
-    # "^FTSE": "FTSE 100",
-    # "^N225": "Nikkei 225",
-    # "^DJI": "Dow Jones Industrial Average",
-}
-```
+**Future enhancement:** Allow user-selectable indices via web interface.
 
-**Priority:** MEDIUM
-
----
-
-### 3. **Database File Path**
-
-**Location:** `src/degiro_portfolio/database.py`
-
-**Hard-coded value:**
-```python
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "..", "stockchart.db")
-```
-
-**Issues:**
-- Still uses old name "stockchart.db" instead of "degiro-portfolio.db"
-- Path is hard-coded
-- Can't easily use a different database location
-
-**Recommendation:**
-```python
-# Use environment variable with fallback
-DB_PATH = os.environ.get(
-    'DEGIRO_PORTFOLIO_DB',
-    os.path.join(os.path.dirname(__file__), "..", "..", "degiro-portfolio.db")
-)
-```
-
-**Priority:** MEDIUM (also rename to match project name)
+**Priority:** LOW (acceptable as configurable constant)
 
 ---
 
