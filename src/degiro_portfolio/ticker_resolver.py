@@ -21,6 +21,7 @@ MANUAL_TICKER_MAPPING: Dict[str, Dict[str, str]] = {
     "IT0003856405": {"EUR": "LDO.MI"},  # LEONARDO SPA - Milan
     "NL0000235190": {"EUR": "AIR.PA"},  # AIRBUS GROUP - Paris
     "DE0007030009": {"EUR": "RHM.DE"},  # RHEINMETALL AG - Frankfurt
+    "NL0000687663": {"USD": "AER", "EUR": "AER"},  # AERCAP HOLDINGS - NYSE
 }
 
 
