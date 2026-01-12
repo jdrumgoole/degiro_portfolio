@@ -6,10 +6,12 @@ Usage:
     invoke stop          - Stop the application
     invoke restart       - Restart the application
     invoke status        - Check application status
-    invoke import-data   - Import transactions from Excel
+    invoke import-data   - Import transactions from Excel (default: Transactions.xlsx)
+    invoke load-demo     - Load demo data (example_data.xlsx)
     invoke fetch-prices  - Fetch latest stock prices
     invoke fetch-indices - Fetch market index data (S&P 500, Euro Stoxx 50)
     invoke setup         - Complete setup (import + fetch)
+    invoke demo-setup    - Complete demo setup (load demo data + fetch)
     invoke clean         - Clean generated files
     invoke test          - Run tests
 """
@@ -46,10 +48,20 @@ def status(c):
 
 
 @task
-def import_data(c):
+def import_data(c, file=None):
     """Import transaction data from Excel."""
     print("📥 Importing transaction data...")
-    c.run("uv run python src/degiro_portfolio/import_data.py", pty=True)
+    if file:
+        c.run(f"uv run python -c \"from src.degiro_portfolio.import_data import import_transactions; import_transactions('{file}')\"", pty=True)
+    else:
+        c.run("uv run python src/degiro_portfolio/import_data.py", pty=True)
+
+
+@task
+def load_demo(c):
+    """Load demo data (example_data.xlsx) for testing."""
+    print("📥 Loading demo data...")
+    c.run("uv run python -c \"from src.degiro_portfolio.import_data import import_transactions; import_transactions('example_data.xlsx')\"", pty=True)
 
 
 @task
@@ -76,6 +88,18 @@ def setup(c):
     print()
     fetch_indices(c)
     print("\n✅ Setup complete! Run 'invoke start' to launch the application.")
+
+
+@task
+def demo_setup(c):
+    """Complete demo setup: load demo data and fetch prices."""
+    print("🔧 Setting up DEGIRO Portfolio with demo data...\n")
+    load_demo(c)
+    print()
+    fetch_prices(c)
+    print()
+    fetch_indices(c)
+    print("\n✅ Demo setup complete! Run 'invoke start' to launch the application.")
 
 
 @task
