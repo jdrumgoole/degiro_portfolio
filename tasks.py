@@ -12,7 +12,8 @@ Usage:
     invoke fetch-indices - Fetch market index data (S&P 500, Euro Stoxx 50)
     invoke setup         - Complete setup (import + fetch)
     invoke demo-setup    - Complete demo setup (load demo data + fetch)
-    invoke clean         - Clean generated files
+    invoke purge-data    - Purge all portfolio data (removes database)
+    invoke clean         - Clean generated files (includes database)
     invoke test          - Run tests
 """
 from invoke import task
@@ -100,6 +101,37 @@ def demo_setup(c):
     print()
     fetch_indices(c)
     print("\n✅ Demo setup complete! Run 'invoke start' to launch the application.")
+
+
+@task
+def purge_data(c):
+    """Purge all portfolio data (removes database only)."""
+    print("⚠️  WARNING: This will delete all portfolio data (stocks, transactions, prices)")
+    print("   Database file will be removed: degiro-portfolio.db")
+
+    response = input("\n   Are you sure you want to continue? (yes/no): ")
+
+    if response.lower() in ['yes', 'y']:
+        db_files = [
+            "degiro-portfolio.db",
+            "stockchart.db",  # Legacy database name
+        ]
+
+        removed = False
+        for file in db_files:
+            file_path = PROJECT_ROOT / file
+            if file_path.exists():
+                file_path.unlink()
+                print(f"   ✓ Removed: {file}")
+                removed = True
+
+        if removed:
+            print("\n✅ Data purged successfully")
+            print("   Run 'invoke load-demo' or 'invoke import-data' to reload data")
+        else:
+            print("\n   No database files found")
+    else:
+        print("\n   Cancelled - no data was deleted")
 
 
 @task
