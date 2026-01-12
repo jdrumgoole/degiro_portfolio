@@ -407,12 +407,13 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
                     db.flush()
                     updated_stocks += 1
 
-                # Parse date
-                date_value = row[get_column('date')]
-                if isinstance(date_value, str):
-                    trans_date = datetime.strptime(date_value, '%d-%m-%Y %H:%M')
-                else:
-                    trans_date = date_value
+                # Parse date and time (DEGIRO exports have separate columns)
+                date_str = str(row[get_column('date')])
+                time_str = str(row[get_column('time')])
+
+                # Combine date and time strings
+                datetime_str = f"{date_str} {time_str}"
+                trans_date = datetime.strptime(datetime_str, "%d-%m-%Y %H:%M")
 
                 # Check if transaction already exists
                 existing_trans = db.query(Transaction).filter(
@@ -426,16 +427,16 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
                     transaction = Transaction(
                         stock_id=stock.id,
                         date=trans_date,
-                        time=trans_date.strftime('%H:%M') if isinstance(trans_date, datetime) else '',
+                        time=time_str,
                         quantity=int(row[get_column('quantity')]),
                         price=float(row[get_column('price')]),
                         currency=row[get_column('currency')],
                         value_eur=float(row[get_column('value_eur')]),
                         total_eur=float(row[get_column('total_eur')]),
-                        venue='',
-                        exchange_rate=None,
-                        fees_eur=None,
-                        transaction_id=''
+                        venue=row[get_column('venue')] if get_column('venue') in row else '',
+                        exchange_rate=float(row[get_column('exchange_rate')]) if get_column('exchange_rate') in row and pd.notna(row[get_column('exchange_rate')]) else None,
+                        fees_eur=float(row[get_column('fees_eur')]) if get_column('fees_eur') in row and pd.notna(row[get_column('fees_eur')]) else None,
+                        transaction_id=str(row[get_column('transaction_id')]) if get_column('transaction_id') in row else ''
                     )
                     db.add(transaction)
                     new_transactions += 1
