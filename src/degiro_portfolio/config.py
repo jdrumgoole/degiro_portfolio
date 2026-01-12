@@ -53,6 +53,17 @@ class Config:
     }
 
     # ========================================================================
+    # Ignored Stocks
+    # ========================================================================
+    # Stocks to ignore during import (collapsed companies, delisted, etc.)
+    # Add ISIN codes of stocks you want to exclude from portfolio tracking
+    IGNORED_STOCKS = {
+        'US82669G1040',  # Signature Bank (collapsed March 2023)
+        # Add more ISINs here as needed:
+        # 'US12345678',  # Example: Another stock to ignore
+    }
+
+    # ========================================================================
     # Excel Column Mappings
     # ========================================================================
     #

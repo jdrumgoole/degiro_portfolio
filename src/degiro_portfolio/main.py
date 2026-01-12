@@ -389,8 +389,12 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
             updated_stocks = 0
 
             for _, row in df.iterrows():
-                # Get or create stock
+                # Check if stock is in the ignore list
                 isin = row[get_column('isin')]
+                if isin in Config.IGNORED_STOCKS:
+                    continue  # Skip ignored stocks
+
+                # Get or create stock
                 stock = db.query(Stock).filter_by(isin=isin).first()
 
                 if not stock:

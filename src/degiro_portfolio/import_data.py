@@ -104,6 +104,12 @@ def import_transactions(excel_file=None):
         print("Creating stocks with native currencies...")
 
         for idx, row in df.iterrows():
+            # Check if stock is in the ignore list
+            isin = row[get_column('isin')]
+            if isin in Config.IGNORED_STOCKS:
+                print(f"  ⏭️  Skipping ignored stock: {row[get_column('product')]} (ISIN: {isin})")
+                continue
+
             transaction_id = str(row[get_column('transaction_id')])
             transaction_currency = row[get_column('currency')]
 
@@ -112,7 +118,7 @@ def import_transactions(excel_file=None):
                 session,
                 df,
                 row[get_column('product')],
-                row[get_column('isin')],
+                isin,
                 row[get_column('exchange')]
             )
 

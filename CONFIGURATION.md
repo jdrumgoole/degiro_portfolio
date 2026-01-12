@@ -97,6 +97,36 @@ INDICES = {
 }
 ```
 
+### 4. Ignored Stocks
+
+Exclude specific stocks from import (collapsed companies, delisted stocks, etc.):
+
+```python
+IGNORED_STOCKS = {
+    'US82669G1040',  # Signature Bank (collapsed March 2023)
+    # Add more ISINs here as needed
+}
+```
+
+**How it works:**
+- Transactions for ignored stocks are **skipped during import**
+- Works for both CLI import (`invoke import-data`) and web upload
+- Useful for excluding collapsed, delisted, or unwanted stocks
+- Prevents cluttering your portfolio with defunct companies
+
+**To add stocks to ignore:**
+1. Find the ISIN code for the stock
+2. Add it to the `IGNORED_STOCKS` set in `config.py`
+3. Re-import your transactions
+
+Example:
+```python
+IGNORED_STOCKS = {
+    'US82669G1040',  # Signature Bank
+    'US0378331005',  # Example: Another stock
+}
+```
+
 ## Supporting Other Brokers
 
 The configuration system makes it easy to support transaction data from other brokers.
