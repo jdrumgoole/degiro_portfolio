@@ -15,6 +15,7 @@ import yfinance as yf
 
 from src.degiro_portfolio.database import get_db, Stock, Transaction, StockPrice, Index, IndexPrice, init_db
 from src.degiro_portfolio.config import Config, get_column
+from src.degiro_portfolio.fetch_prices import fetch_stock_prices
 
 # NOTE: Hard-coded ticker mappings have been replaced by automatic resolution
 # via ticker_resolver.py. Tickers are now stored in the database and resolved
@@ -387,6 +388,7 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
             # Process transactions
             new_transactions = 0
             updated_stocks = 0
+            stocks_to_fetch_prices = set()  # Track stocks that need price fetching
 
             for _, row in df.iterrows():
                 # Check if stock is in the ignore list
@@ -410,6 +412,9 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
                     db.add(stock)
                     db.flush()
                     updated_stocks += 1
+                    stocks_to_fetch_prices.add(stock.id)  # Track new stock for price fetching
+                else:
+                    stocks_to_fetch_prices.add(stock.id)  # Also fetch for existing stocks if needed
 
                 # Parse date and time (DEGIRO exports have separate columns)
                 date_str = str(row[get_column('date')])
@@ -447,10 +452,34 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
 
             db.commit()
 
+            # After successful import, fetch prices for stocks that need them
+            total_prices = 0
+            stocks_with_prices = 0
+
+            if stocks_to_fetch_prices:
+                print(f"\n📈 Fetching prices for {len(stocks_to_fetch_prices)} stocks...")
+
+                for stock_id in stocks_to_fetch_prices:
+                    stock = db.query(Stock).filter_by(id=stock_id).first()
+                    if stock:
+                        # Only fetch if we haven't already fetched for this stock
+                        existing_prices = db.query(StockPrice).filter_by(stock_id=stock.id).count()
+                        if existing_prices == 0:
+                            price_count = fetch_stock_prices(stock, db)
+                            if price_count > 0:
+                                total_prices += price_count
+                                stocks_with_prices += 1
+
+            message = f"Successfully imported {new_transactions} new transactions"
+            if updated_stocks > 0:
+                message += f" for {updated_stocks} new stocks"
+            if total_prices > 0:
+                message += f" and fetched {total_prices} price records"
+
             return JSONResponse(
                 content={
                     "success": True,
-                    "message": f"Successfully imported {new_transactions} new transactions for {updated_stocks} stocks"
+                    "message": message
                 }
             )
 

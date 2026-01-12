@@ -3,13 +3,15 @@ import pandas as pd
 from datetime import datetime
 from collections import Counter
 try:
-    from src.degiro_portfolio.database import SessionLocal, init_db, Stock, Transaction
+    from src.degiro_portfolio.database import SessionLocal, init_db, Stock, Transaction, StockPrice
     from src.degiro_portfolio.ticker_resolver import get_ticker_for_stock
     from src.degiro_portfolio.config import Config, get_column
+    from src.degiro_portfolio.fetch_prices import fetch_stock_prices
 except ModuleNotFoundError:
-    from database import SessionLocal, init_db, Stock, Transaction
+    from database import SessionLocal, init_db, Stock, Transaction, StockPrice
     from ticker_resolver import get_ticker_for_stock
     from config import Config, get_column
+    from fetch_prices import fetch_stock_prices
 
 
 def parse_date(date_str, time_str):
@@ -149,6 +151,33 @@ def import_transactions(excel_file=None):
         session.commit()
         print(f"\n✅ Import complete!")
         print(f"   Imported: {imported} transactions\n")
+
+        # Fetch prices for all stocks with current holdings
+        print("="*80)
+        print("Fetching prices for current holdings...")
+        print("="*80)
+        stocks = session.query(Stock).all()
+        total_prices = 0
+        stocks_with_prices = 0
+
+        for stock in stocks:
+            # Check if stock has current holdings
+            total_qty = session.query(Transaction).filter_by(stock_id=stock.id).with_entities(
+                Transaction.quantity
+            ).all()
+            current_holding = sum(q[0] for q in total_qty)
+
+            if current_holding > 0:
+                # Only fetch if we haven't already fetched for this stock
+                existing_prices = session.query(StockPrice).filter_by(stock_id=stock.id).count()
+                if existing_prices == 0:
+                    price_count = fetch_stock_prices(stock, session)
+                    if price_count > 0:
+                        total_prices += price_count
+                        stocks_with_prices += 1
+
+        if total_prices > 0:
+            print(f"\n✅ Fetched {total_prices} price records for {stocks_with_prices} stocks\n")
 
         # Show summary with currencies
         print("="*80)
