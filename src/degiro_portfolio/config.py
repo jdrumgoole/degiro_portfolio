@@ -34,11 +34,14 @@ class Config:
     # ========================================================================
     # Data Fetching Configuration
     # ========================================================================
-    # Data provider: 'yahoo' or 'twelvedata'
+    # Data provider: 'yahoo', 'twelvedata', or 'fmp'
     PRICE_DATA_PROVIDER = os.environ.get('PRICE_DATA_PROVIDER', 'yahoo')
 
     # Twelve Data API key (get free key at https://twelvedata.com/)
     TWELVEDATA_API_KEY = os.environ.get('TWELVEDATA_API_KEY', '')
+
+    # Financial Modeling Prep API key (get key at https://site.financialmodelingprep.com/)
+    FMP_API_KEY = os.environ.get('FMP_API_KEY', '')
 
     # How far back to fetch price data initially
     INITIAL_FETCH_PERIOD = os.environ.get('INITIAL_FETCH_PERIOD', 'max')

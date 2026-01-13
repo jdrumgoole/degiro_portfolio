@@ -14,6 +14,7 @@ dependencies = [
     "python-multipart>=0.0.21",
     "twelvedata>=1.2.25",
     "python-dotenv>=1.2.1",
+    "requests>=2.31.0",
 ]
 
 [project.optional-dependencies]

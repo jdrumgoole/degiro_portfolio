@@ -22,7 +22,22 @@ This will install all required dependencies including:
 
 ## Initial Setup
 
-### 1. Import Transaction Data
+### 1. Configure Data Provider (Optional)
+
+By default, the application uses Yahoo Finance (free, no setup required). For better reliability and coverage, you can configure FMP or Twelve Data:
+
+```bash
+# Create .env file
+cp .env.example .env
+
+# Edit .env and set your provider
+# PRICE_DATA_PROVIDER=fmp
+# FMP_API_KEY=your_api_key_here
+```
+
+See [Data Providers](data-providers.md) for detailed configuration options.
+
+### 2. Import Transaction Data
 
 You have two options for importing data:
 
@@ -42,7 +57,7 @@ uv run invoke load-demo
 
 This imports the included `example_data.xlsx` with sample AI and European tech stocks.
 
-### 2. Fetch Stock Prices
+### 3. Fetch Stock Prices
 
 After importing transactions, fetch historical price data:
 
@@ -50,9 +65,9 @@ After importing transactions, fetch historical price data:
 uv run invoke fetch-prices
 ```
 
-This will download historical OHLCV (Open, High, Low, Close, Volume) data for all stocks in your portfolio.
+This will download historical OHLCV (Open, High, Low, Close, Volume) data for all stocks in your portfolio using your configured data provider.
 
-### 3. Fetch Market Indices
+### 4. Fetch Market Indices
 
 Get market index data for comparison:
 
@@ -64,7 +79,7 @@ This fetches data for:
 - S&P 500 (^GSPC)
 - Euro Stoxx 50 (^STOXX50E)
 
-### 4. Start the Server
+### 5. Start the Server
 
 ```bash
 ./degiro-portfolio start
@@ -76,7 +91,7 @@ Or using invoke:
 uv run invoke start
 ```
 
-### 5. Access the Application
+### 6. Access the Application
 
 Open your browser and navigate to:
 

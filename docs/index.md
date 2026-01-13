@@ -8,6 +8,7 @@ maxdepth: 2
 caption: Contents
 ---
 getting-started
+data-providers
 features
 api-reference
 development
