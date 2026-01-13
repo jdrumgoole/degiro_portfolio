@@ -518,9 +518,9 @@
                 'EUR': '€',
                 'GBP': '£',
                 'JPY': '¥',
-                'SEK': 'kr',
-                'NOK': 'kr',
-                'DKK': 'kr',
+                'SEK': 'SEK',
+                'NOK': 'NOK',
+                'DKK': 'DKK',
                 'CHF': 'CHF',
                 'CAD': 'C$',
                 'AUD': 'A$'
@@ -534,9 +534,11 @@
                 minimumFractionDigits: 2,
                 maximumFractionDigits: 2
             });
-            if (['USD', 'EUR', 'GBP'].includes(currency)) {
+            // Symbol-first currencies
+            if (['$', '€', '£', '¥', 'C$', 'A$'].includes(symbol)) {
                 return `${symbol}${formattedNumber}`;
             } else {
+                // Code-after currencies (SEK, NOK, DKK, CHF, etc.)
                 return `${formattedNumber} ${symbol}`;
             }
         }
@@ -798,8 +800,24 @@
             grid.innerHTML = holdings.map(stock => {
                 let priceInfo = '';
                 if (stock.latest_price !== null && stock.latest_price !== undefined) {
-                    const currencySymbol = stock.currency === 'USD' ? '$' : '€';
+                    // Get currency symbol or code
+                    const currencyMap = {
+                        'USD': '$',
+                        'EUR': '€',
+                        'GBP': '£',
+                        'JPY': '¥',
+                        'CHF': 'CHF',
+                        'SEK': 'SEK',
+                        'NOK': 'NOK',
+                        'DKK': 'DKK'
+                    };
+                    const currency = currencyMap[stock.currency] || stock.currency;
                     const formattedPrice = stock.latest_price.toFixed(2);
+
+                    // Format price based on whether we have a symbol or code
+                    const priceDisplay = ['$', '€', '£', '¥'].includes(currency)
+                        ? `${currency}${formattedPrice}`
+                        : `${formattedPrice} ${currency}`;
 
                     let changeHtml = '';
                     if (stock.price_change_pct !== null && stock.price_change_pct !== undefined) {
@@ -808,7 +826,7 @@
                         changeHtml = `<span class="${changeClass}">${changeSymbol} ${Math.abs(stock.price_change_pct).toFixed(2)}%</span>`;
                     }
 
-                    priceInfo = `<div class="stock-price">${currencySymbol}${formattedPrice} ${changeHtml}</div>`;
+                    priceInfo = `<div class="stock-price">${priceDisplay} ${changeHtml}</div>`;
                 }
 
                 // Generate URLs
