@@ -81,8 +81,22 @@ def fetch_stock_prices(stock, session, start_date=None, end_date=None):
         fetcher = get_price_fetcher()
         hist = fetcher.fetch_prices(ticker_symbol, start_date, end_date)
 
+        # If primary provider returns no data, fall back to Yahoo Finance
+        # CRITICAL: Use original ticker (ticker_symbol), not FMP-normalized ticker
+        if hist.empty and provider != 'yahoo':
+            print(f"  ⚠️  No data from {provider}, trying Yahoo Finance as fallback...")
+            try:
+                from .price_fetchers import YahooFinanceFetcher
+            except ImportError:
+                from degiro_portfolio.price_fetchers import YahooFinanceFetcher
+            yahoo_fetcher = YahooFinanceFetcher()
+            # Use ticker_symbol directly (e.g., SAAB-B.ST, not SAABY)
+            hist = yahoo_fetcher.fetch_prices(ticker_symbol, start_date, end_date)
+            if not hist.empty:
+                print(f"  ✓ Using Yahoo Finance data")
+
         if hist.empty:
-            print(f"  ❌ No price data available")
+            print(f"  ❌ No price data available from any provider")
             return 0
 
         count = 0

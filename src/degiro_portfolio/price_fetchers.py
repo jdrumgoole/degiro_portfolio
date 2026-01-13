@@ -81,15 +81,14 @@ class FMPFetcher(PriceFetcher):
         """
         # Special mappings for stocks that use different symbols on FMP
         # FMP uses US ADR/OTC symbols for international stocks
+        # NOTE: ADR mappings removed for SAAB, Leonardo, Rheinmetall because ADR prices
+        # don't match actual stock prices. Yahoo Finance fallback handles these stocks.
         special_mappings = {
             'IFX': 'IFNNY',      # Infineon -> US ADR
             'ERIC-B': 'ERIC',    # Ericsson B-shares -> base symbol
             'NOKIA': 'NOK',      # Nokia ADR
             'STM': 'STM',        # STMicroelectronics ADR (already correct)
-            'SAAB-B': 'SAABY',   # SAAB B-shares -> US ADR
-            'SAAB': 'SAABY',     # SAAB -> US ADR
-            'LDO': 'FINMY',      # Leonardo -> US ADR (Finmeccanica legacy name)
-            'RHM': 'RNMBY',      # Rheinmetall -> US ADR
+            # Removed: SAAB-B, SAAB, LDO, RHM (ADRs have wrong prices)
         }
 
         # Common European exchange suffixes to remove
