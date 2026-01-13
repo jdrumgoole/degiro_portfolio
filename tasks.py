@@ -6,12 +6,12 @@ Usage:
     invoke stop          - Stop the application
     invoke restart       - Restart the application
     invoke status        - Check application status
-    invoke import-data   - Import transactions from Excel and fetch indices (default: Transactions.xlsx)
-    invoke load-demo     - Load demo data (example_data.xlsx) and fetch indices
+    invoke import-data   - Import transactions from Excel, fetch prices, and fetch indices (default: Transactions.xlsx)
+    invoke load-demo     - Load demo data (example_data.xlsx), fetch prices, and fetch indices
     invoke fetch-prices  - Fetch latest stock prices
     invoke fetch-indices - Fetch market index data (S&P 500, Euro Stoxx 50)
-    invoke setup         - Complete setup (import + fetch)
-    invoke demo-setup    - Complete demo setup (load demo data + fetch)
+    invoke setup         - Complete setup (same as import-data)
+    invoke demo-setup    - Complete demo setup (same as load-demo)
     invoke purge-data    - Purge all portfolio data (stops server, removes database, restarts server)
     invoke clean         - Clean generated files (includes database)
     invoke test          - Run tests
@@ -50,21 +50,25 @@ def status(c):
 
 @task
 def import_data(c, file=None):
-    """Import transaction data from Excel and fetch indices."""
+    """Import transaction data from Excel, fetch prices, and fetch indices."""
     print("📥 Importing transaction data...")
     if file:
         c.run(f"uv run python -c \"from src.degiro_portfolio.import_data import import_transactions; import_transactions('{file}')\"", pty=True)
     else:
         c.run("uv run python src/degiro_portfolio/import_data.py", pty=True)
     print()
+    fetch_prices(c)
+    print()
     fetch_indices(c)
 
 
 @task
 def load_demo(c):
-    """Load demo data (example_data.xlsx) for testing and fetch indices."""
+    """Load demo data (example_data.xlsx), fetch prices, and fetch indices."""
     print("📥 Loading demo data...")
     c.run("uv run python -c \"from src.degiro_portfolio.import_data import import_transactions; import_transactions('example_data.xlsx')\"", pty=True)
+    print()
+    fetch_prices(c)
     print()
     fetch_indices(c)
 
@@ -85,25 +89,17 @@ def fetch_indices(c):
 
 @task
 def setup(c):
-    """Complete setup: import data and fetch prices."""
+    """Complete setup: import data, fetch prices, and fetch indices."""
     print("🔧 Setting up DEGIRO Portfolio application...\n")
     import_data(c)
-    print()
-    fetch_prices(c)
-    print()
-    fetch_indices(c)
     print("\n✅ Setup complete! Run 'invoke start' to launch the application.")
 
 
 @task
 def demo_setup(c):
-    """Complete demo setup: load demo data and fetch prices."""
+    """Complete demo setup: load demo data, fetch prices, and fetch indices."""
     print("🔧 Setting up DEGIRO Portfolio with demo data...\n")
     load_demo(c)
-    print()
-    fetch_prices(c)
-    print()
-    fetch_indices(c)
     print("\n✅ Demo setup complete! Run 'invoke start' to launch the application.")
 
 
