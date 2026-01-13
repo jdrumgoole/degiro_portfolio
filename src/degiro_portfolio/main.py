@@ -287,11 +287,11 @@ async def get_chart_data(stock_id: int, db: Session = Depends(get_db)):
     else:
         stock_normalized = []
 
-    # Calculate position value as percentage of cumulative investment
+    # Calculate position value as percentage of net investment (buys - sells)
     position_percentage = []
     if prices and transactions:
         cumulative_shares = 0
-        cumulative_invested = 0
+        net_invested = 0
 
         # Build transaction lookup by date
         trans_by_date = {}
@@ -304,25 +304,44 @@ async def get_chart_data(stock_id: int, db: Session = Depends(get_db)):
         for price in prices:
             price_date = price.date.strftime("%Y-%m-%d")
 
-            # Update cumulative shares and investment for any transactions on or before this date
+            # Update cumulative shares and net investment for any transactions on or before this date
             for trans_date, trans_list in trans_by_date.items():
                 if trans_date <= price_date:
                     for t in trans_list:
                         cumulative_shares += t.quantity
-                        if t.quantity > 0:  # Only count buy transactions for investment
-                            cumulative_invested += abs(t.total_eur)
+                        # Net invested = buys - sells
+                        if t.quantity > 0:  # Buy
+                            net_invested += abs(t.total_eur)
+                        else:  # Sell
+                            net_invested -= abs(t.total_eur)
                     # Remove processed transactions
                     del trans_by_date[trans_date]
                     break
 
-            # Calculate current value and percentage
-            if cumulative_invested > 0 and cumulative_shares > 0:
-                current_value = price.close * cumulative_shares
-                percentage = (current_value / cumulative_invested) * 100
+            # Calculate current value with proper currency conversion
+            if net_invested > 0 and cumulative_shares > 0:
+                # Convert price to EUR using actual exchange currency, not DEGIRO transaction currency
+                if price.currency == 'EUR':
+                    price_eur = price.close
+                else:
+                    # Get most recent exchange rate from transactions on or before this date
+                    exchange_rate = None
+                    for t in transactions:
+                        if t.date.strftime("%Y-%m-%d") <= price_date and t.exchange_rate:
+                            exchange_rate = t.exchange_rate
+
+                    if exchange_rate:
+                        price_eur = price.close / exchange_rate
+                    else:
+                        # Fallback: treat as EUR equivalent
+                        price_eur = price.close
+
+                current_value = price_eur * cumulative_shares
+                percentage = (current_value / net_invested) * 100
                 position_percentage.append({
                     "date": price_date,
                     "percentage": percentage,
-                    "invested": cumulative_invested,
+                    "invested": net_invested,
                     "value": current_value
                 })
 
