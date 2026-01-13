@@ -942,7 +942,10 @@
         }
 
         function renderChart(data) {
-            const currency = data.stock.currency;
+            // Use actual price currency from exchange data, not DEGIRO transaction currency
+            const currency = data.prices.length > 0 && data.prices[0].currency
+                ? data.prices[0].currency
+                : data.stock.currency;
             const latestPrice = data.prices.length > 0 ? data.prices[data.prices.length - 1].close : 0;
             const dates = data.prices.map(p => p.date);
             const closePrices = data.prices.map(p => p.close);
@@ -967,12 +970,9 @@
                 decreasing: { line: { color: '#fc8181' } }
             };
 
-            // Determine the price currency from the price data
-            const priceCurrency = data.prices.length > 0 && data.prices[0].currency ? data.prices[0].currency : currency;
-
             // Buy transactions - only show those in the same currency as price data
             const buyTransactions = data.transactions.filter(t =>
-                t.transaction_type === 'buy' && t.currency === priceCurrency
+                t.transaction_type === 'buy' && t.currency === currency
             );
             const buyTrace = {
                 x: buyTransactions.map(t => t.date),
@@ -993,7 +993,7 @@
 
             // Sell transactions - only show those in the same currency as price data
             const sellTransactions = data.transactions.filter(t =>
-                t.transaction_type === 'sell' && t.currency === priceCurrency
+                t.transaction_type === 'sell' && t.currency === currency
             );
             const sellTrace = {
                 x: sellTransactions.map(t => t.date),
