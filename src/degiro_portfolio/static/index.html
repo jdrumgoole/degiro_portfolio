@@ -451,7 +451,10 @@
                         📤 Upload Transactions
                     </button>
                 </div>
-                <div id="market-data-status" style="font-size: 11px; color: #718096; margin-top: -4px;"></div>
+                <div style="font-size: 11px; color: #718096; margin-top: -4px;">
+                    <div id="market-data-status"></div>
+                    <div id="live-prices-status" style="margin-top: 4px;"></div>
+                </div>
             </div>
         </header>
 
@@ -1377,8 +1380,74 @@
             }
         }
 
+        // Live price updates (FMP only)
+        let livePricesEnabled = false;
+        let livePricesInterval = null;
+
+        async function refreshLivePrices() {
+            try {
+                const response = await fetch('/api/refresh-live-prices', {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (result.success && result.quotes) {
+                    // Update holdings with new prices
+                    result.quotes.forEach(quote => {
+                        const holding = holdings.find(h => h.id === quote.stock_id);
+                        if (holding) {
+                            holding.latest_price = quote.price;
+                            holding.price_change_pct = quote.change_percent;
+                            holding.price_date = new Date().toISOString().split('T')[0];
+                        }
+                    });
+
+                    // Re-render holdings to show updated prices
+                    renderHoldings();
+
+                    // Update status
+                    const statusDiv = document.getElementById('live-prices-status');
+                    const now = new Date();
+                    const timeStr = now.toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                    statusDiv.textContent = `🔴 Live prices: ${timeStr} (${result.count} stocks)`;
+                    statusDiv.style.color = '#48bb78';  // Green color for success
+                    livePricesEnabled = true;
+                } else if (!result.success) {
+                    console.log('Live prices not available:', result.message);
+                    livePricesEnabled = false;
+                }
+            } catch (error) {
+                console.error('Failed to refresh live prices:', error);
+            }
+        }
+
+        function startLivePriceUpdates() {
+            // Try to fetch live prices immediately
+            refreshLivePrices();
+
+            // Then poll every 60 seconds
+            livePricesInterval = setInterval(refreshLivePrices, 60000);
+        }
+
+        function stopLivePriceUpdates() {
+            if (livePricesInterval) {
+                clearInterval(livePricesInterval);
+                livePricesInterval = null;
+            }
+            const statusDiv = document.getElementById('live-prices-status');
+            statusDiv.textContent = '';
+        }
+
         // Initialize
-        loadHoldings();
+        loadHoldings().then(() => {
+            // Start live price updates after holdings are loaded
+            startLivePriceUpdates();
+        });
     </script>
 </body>
 </html>

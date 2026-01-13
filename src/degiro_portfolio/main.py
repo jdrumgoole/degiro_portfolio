@@ -555,6 +555,78 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
         )
 
 
+@app.post("/api/refresh-live-prices")
+async def refresh_live_prices(db: Session = Depends(get_db)):
+    """Fetch real-time price quotes for currently held stocks (FMP only)."""
+    try:
+        # Only FMP supports real-time quotes
+        if Config.PRICE_DATA_PROVIDER != 'fmp':
+            return JSONResponse(
+                content={
+                    "success": False,
+                    "message": f"Live prices only available with FMP provider (current: {Config.PRICE_DATA_PROVIDER})"
+                }
+            )
+
+        from .price_fetchers import FMPFetcher
+        fetcher = FMPFetcher()
+
+        # Get currently held stocks
+        all_stocks = db.query(Stock).all()
+        current_holdings = []
+        for stock in all_stocks:
+            total_qty = db.query(func.sum(Transaction.quantity)).filter_by(
+                stock_id=stock.id
+            ).scalar() or 0
+            if total_qty > 0:
+                current_holdings.append(stock)
+
+        # Fetch quotes for all holdings
+        quotes = []
+        errors = []
+
+        for stock in current_holdings:
+            ticker_symbol = stock.yahoo_ticker
+            if not ticker_symbol:
+                errors.append(f"No ticker for {stock.name}")
+                continue
+
+            quote = fetcher.fetch_latest_quote(ticker_symbol)
+            if quote:
+                quotes.append({
+                    "stock_id": stock.id,
+                    "name": stock.name,
+                    "symbol": stock.symbol,
+                    "ticker": ticker_symbol,
+                    "price": quote['price'],
+                    "change": quote['change'],
+                    "change_percent": quote['change_percent'],
+                    "open": quote['open'],
+                    "high": quote['high'],
+                    "low": quote['low'],
+                    "volume": quote['volume'],
+                    "timestamp": quote['timestamp']
+                })
+            else:
+                errors.append(f"No quote for {stock.name}")
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "quotes": quotes,
+                "count": len(quotes),
+                "errors": errors,
+                "timestamp": datetime.now().isoformat()
+            }
+        )
+
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": f"Error fetching live prices: {str(e)}"}
+        )
+
+
 @app.post("/api/update-market-data")
 async def update_market_data(db: Session = Depends(get_db)):
     """Fetch latest market data for currently held stocks and indices."""

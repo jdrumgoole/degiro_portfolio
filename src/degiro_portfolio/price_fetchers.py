@@ -113,6 +113,59 @@ class FMPFetcher(PriceFetcher):
         # Return the base ticker
         return base_ticker
 
+    def fetch_latest_quote(self, ticker: str) -> Optional[dict]:
+        """
+        Fetch latest available price for a single ticker using stable historical endpoint.
+
+        Returns dict with: price, open, high, low, volume, change, change_percent, timestamp
+        Returns None if fetch fails.
+
+        Note: Uses the stable historical EOD endpoint which is accessible with standard FMP plan.
+        Returns the most recent 2 days to calculate price changes.
+        """
+        try:
+            fmp_ticker = self._normalize_ticker(ticker)
+
+            # Use stable endpoint which works with paid plan
+            url = f"{self.base_url}/stable/historical-price-eod/full"
+            params = {
+                'symbol': fmp_ticker,
+                'apikey': self.api_key
+            }
+
+            response = self.session.get(url, params=params, timeout=10)
+            response.raise_for_status()
+
+            data = response.json()
+
+            # Check if we got valid data (stable endpoint returns list directly)
+            if not data or len(data) == 0:
+                return None
+
+            # Get the most recent price (first item - data is sorted newest first)
+            latest = data[0]
+
+            # FMP returns these fields already
+            change = latest.get('change', 0)
+            change_percent = latest.get('changePercent', 0)
+
+            # Extract relevant fields
+            return {
+                'ticker': ticker,  # Return original ticker format
+                'price': latest.get('close'),
+                'open': latest.get('open'),
+                'high': latest.get('high'),
+                'low': latest.get('low'),
+                'volume': latest.get('volume'),
+                'change': change,
+                'change_percent': change_percent,
+                'timestamp': latest.get('date'),
+            }
+
+        except Exception as e:
+            print(f"  ❌ FMP quote error for {ticker}: {e}")
+            return None
+
     def fetch_prices(self, ticker: str, start_date: datetime, end_date: datetime) -> pd.DataFrame:
         """Fetch from FMP REST API."""
         try:
