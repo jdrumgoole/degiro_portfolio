@@ -406,6 +406,102 @@ async def get_portfolio_performance(db: Session = Depends(get_db)):
     return {"stocks": portfolio_data}
 
 
+@app.get("/api/portfolio-valuation-history")
+async def get_portfolio_valuation_history(db: Session = Depends(get_db)):
+    """
+    Get historical portfolio valuation over time.
+    Returns dates, cumulative invested capital, and portfolio values (all in EUR).
+    """
+    # Get all transactions ordered by date
+    all_transactions = db.query(Transaction).order_by(Transaction.date).all()
+
+    if not all_transactions:
+        return {"dates": [], "invested": [], "values": []}
+
+    # Get all unique dates from price history after first transaction
+    first_trans_date = all_transactions[0].date
+    price_dates = db.query(StockPrice.date).filter(
+        StockPrice.date >= first_trans_date
+    ).distinct().order_by(StockPrice.date).all()
+
+    if not price_dates:
+        return {"dates": [], "invested": [], "values": []}
+
+    # Get all stocks
+    stocks = db.query(Stock).all()
+
+    # Group transactions by stock for efficient lookup
+    trans_by_stock = {}
+    for t in all_transactions:
+        if t.stock_id not in trans_by_stock:
+            trans_by_stock[t.stock_id] = []
+        trans_by_stock[t.stock_id].append(t)
+
+    dates = []
+    invested_series = []
+    value_series = []
+
+    for (price_date,) in price_dates:
+        # Calculate cumulative invested (buy transactions only)
+        cumulative_invested = sum(
+            abs(t.total_eur)
+            for t in all_transactions
+            if t.date <= price_date and t.quantity > 0
+        )
+
+        # Calculate portfolio value
+        total_value_eur = 0
+
+        for stock in stocks:
+            # Calculate holdings for this stock at this date
+            holdings = sum(
+                t.quantity
+                for t in trans_by_stock.get(stock.id, [])
+                if t.date <= price_date
+            )
+
+            if holdings <= 0:
+                continue
+
+            # Get price on or before this date
+            price_record = db.query(StockPrice).filter(
+                StockPrice.stock_id == stock.id,
+                StockPrice.date <= price_date
+            ).order_by(StockPrice.date.desc()).first()
+
+            if not price_record:
+                continue
+
+            # Convert price to EUR
+            if stock.currency == 'EUR' or price_record.currency == 'EUR':
+                price_eur = price_record.close
+            else:
+                # Get most recent exchange rate from transactions
+                exchange_rate = None
+                for t in reversed(trans_by_stock.get(stock.id, [])):
+                    if t.date <= price_date and t.exchange_rate:
+                        exchange_rate = t.exchange_rate
+                        break
+
+                if exchange_rate:
+                    price_eur = price_record.close / exchange_rate
+                else:
+                    # Fallback: treat as EUR equivalent
+                    price_eur = price_record.close
+
+            total_value_eur += holdings * price_eur
+
+        dates.append(price_date.strftime("%Y-%m-%d"))
+        invested_series.append(round(cumulative_invested, 2))
+        value_series.append(round(total_value_eur, 2))
+
+    return {
+        "dates": dates,
+        "invested": invested_series,
+        "values": value_series
+    }
+
+
 @app.post("/api/upload-transactions")
 async def upload_transactions(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """Upload and process a new transactions Excel file."""

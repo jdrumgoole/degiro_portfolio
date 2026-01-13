@@ -244,6 +244,18 @@
             height: 350px;
         }
 
+        #portfolio-valuation-chart {
+            width: 100%;
+            height: 400px;
+        }
+
+        #portfolio-chart-section {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
         .chart-subtitle {
             font-size: 1em;
             color: #4a5568;
@@ -468,6 +480,12 @@
             <div class="summary-grid" id="summary-grid"></div>
         </div>
 
+        <!-- Portfolio Valuation Chart -->
+        <div id="portfolio-chart-section" class="chart-container" style="display: none; margin-bottom: 30px;">
+            <div class="chart-title">Portfolio Total Value Over Time</div>
+            <div id="portfolio-valuation-chart"></div>
+        </div>
+
         <div id="holdings-container" style="display: none;">
             <div class="holdings-grid" id="holdings-grid"></div>
         </div>
@@ -602,6 +620,89 @@
 
             } catch (error) {
                 console.error('Failed to load portfolio summary:', error);
+            }
+        }
+
+        // Load and render portfolio valuation chart
+        async function loadPortfolioValuationChart() {
+            try {
+                const response = await fetch('/api/portfolio-valuation-history');
+                const data = await response.json();
+
+                if (data.dates.length === 0) {
+                    return; // No data to display
+                }
+
+                // Show the chart section
+                document.getElementById('portfolio-chart-section').style.display = 'block';
+
+                // Create traces
+                const portfolioTrace = {
+                    x: data.dates,
+                    y: data.values,
+                    mode: 'lines',
+                    name: 'Portfolio Value',
+                    line: {
+                        color: '#667eea',
+                        width: 3
+                    },
+                    fill: 'tonexty',
+                    fillcolor: 'rgba(102, 126, 234, 0.1)',
+                    hovertemplate: '<b>Portfolio Value</b><br>€%{y:,.2f}<br>%{x}<extra></extra>'
+                };
+
+                const investedTrace = {
+                    x: data.dates,
+                    y: data.invested,
+                    mode: 'lines',
+                    name: 'Cumulative Invested',
+                    line: {
+                        color: '#48bb78',
+                        width: 2,
+                        dash: 'dash'
+                    },
+                    hovertemplate: '<b>Invested Capital</b><br>€%{y:,.2f}<br>%{x}<extra></extra>'
+                };
+
+                const layout = {
+                    xaxis: {
+                        title: 'Date',
+                        type: 'date',
+                        gridcolor: '#e2e8f0'
+                    },
+                    yaxis: {
+                        title: 'Value (EUR)',
+                        gridcolor: '#e2e8f0',
+                        tickformat: ',.0f',
+                        tickprefix: '€'
+                    },
+                    hovermode: 'x unified',
+                    showlegend: true,
+                    legend: {
+                        x: 0,
+                        y: 1.15,
+                        orientation: 'h',
+                        bgcolor: 'rgba(255, 255, 255, 0.9)'
+                    },
+                    plot_bgcolor: '#f7fafc',
+                    paper_bgcolor: 'white',
+                    margin: { t: 10, b: 40 },
+                    font: {
+                        family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+                    }
+                };
+
+                const config = {
+                    responsive: true,
+                    displayModeBar: true,
+                    displaylogo: false,
+                    modeBarButtonsToRemove: ['lasso2d', 'select2d']
+                };
+
+                Plotly.newPlot('portfolio-valuation-chart', [investedTrace, portfolioTrace], layout, config);
+
+            } catch (error) {
+                console.error('Failed to load portfolio valuation chart:', error);
             }
         }
 
@@ -1455,6 +1556,9 @@
 
         // Initialize
         loadHoldings().then(() => {
+            // Load portfolio valuation chart (NEW)
+            loadPortfolioValuationChart();
+
             // Start live price updates after holdings are loaded
             startLivePriceUpdates();
         });
