@@ -1266,6 +1266,19 @@
                 const posPercentDates = data.position_percentage.map(p => p.date);
                 const posPercentValues = data.position_percentage.map(p => p.percentage);
 
+                // Calculate dynamic Y-axis range centered on 100% (break-even)
+                const minValue = Math.min(...posPercentValues);
+                const maxValue = Math.max(...posPercentValues);
+
+                // Calculate distance from 100% for both directions
+                const distanceBelow = 100 - minValue;
+                const distanceAbove = maxValue - 100;
+
+                // Use the larger distance and add 10% padding
+                const maxDistance = Math.max(distanceBelow, distanceAbove, 40); // Minimum 40% range
+                const padding = maxDistance * 0.1;
+                const yRange = [100 - maxDistance - padding, 100 + maxDistance + padding];
+
                 const posPercentTrace = {
                     x: posPercentDates,
                     y: posPercentValues,
@@ -1292,7 +1305,10 @@
                     yaxis: {
                         title: 'Position Value (%)',
                         gridcolor: '#e2e8f0',
-                        zeroline: false
+                        range: yRange,
+                        fixedrange: false,
+                        zeroline: true,
+                        zerolinecolor: '#cbd5e0'
                     },
                     hovermode: 'x unified',
                     showlegend: false,
