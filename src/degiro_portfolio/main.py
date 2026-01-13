@@ -416,6 +416,7 @@ async def get_portfolio_valuation_history(db: Session = Depends(get_db)):
     """
     Get historical portfolio valuation over time.
     Returns dates, net invested capital (buys - sells), and portfolio values (all in EUR).
+    Shows only from the first purchase of currently held stocks.
     """
     # Get all transactions ordered by date
     all_transactions = db.query(Transaction).order_by(Transaction.date).all()
@@ -423,17 +424,31 @@ async def get_portfolio_valuation_history(db: Session = Depends(get_db)):
     if not all_transactions:
         return {"dates": [], "invested": [], "values": []}
 
-    # Get all unique dates from price history after first transaction
-    first_trans_date = all_transactions[0].date
+    # Get all stocks
+    stocks = db.query(Stock).all()
+
+    # Find stocks with current holdings > 0
+    current_stock_ids = set()
+    for stock in stocks:
+        total_qty = sum(t.quantity for t in all_transactions if t.stock_id == stock.id)
+        if total_qty > 0:
+            current_stock_ids.add(stock.id)
+
+    if not current_stock_ids:
+        return {"dates": [], "invested": [], "values": []}
+
+    # Find earliest transaction for currently held stocks
+    first_trans_date = min(
+        t.date for t in all_transactions if t.stock_id in current_stock_ids
+    )
+
+    # Get all unique dates from price history after first transaction of current holdings
     price_dates = db.query(StockPrice.date).filter(
         StockPrice.date >= first_trans_date
     ).distinct().order_by(StockPrice.date).all()
 
     if not price_dates:
         return {"dates": [], "invested": [], "values": []}
-
-    # Get all stocks
-    stocks = db.query(Stock).all()
 
     # Group transactions by stock for efficient lookup
     trans_by_stock = {}
