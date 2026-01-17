@@ -7,20 +7,23 @@ import pandas as pd
 
 
 def test_get_price_fetcher_returns_twelvedata():
-    """Test that get_price_fetcher returns TwelveDataFetcher by default."""
+    """Test that get_price_fetcher returns TwelveDataFetcher when configured."""
     from degiro_portfolio.price_fetchers import get_price_fetcher, TwelveDataFetcher
     from degiro_portfolio.config import Config
 
-    # Mock API key for test by patching Config directly
+    # Mock API key and set provider to twelvedata
     original_key = Config.TWELVEDATA_API_KEY
+    original_provider = Config.PRICE_DATA_PROVIDER
     Config.TWELVEDATA_API_KEY = 'test_key_for_ci'
+    Config.PRICE_DATA_PROVIDER = 'twelvedata'
 
     try:
         fetcher = get_price_fetcher()
         assert isinstance(fetcher, TwelveDataFetcher)
     finally:
-        # Restore original
+        # Restore originals
         Config.TWELVEDATA_API_KEY = original_key
+        Config.PRICE_DATA_PROVIDER = original_provider
 
 
 def test_get_price_fetcher_returns_fmp_when_configured():
