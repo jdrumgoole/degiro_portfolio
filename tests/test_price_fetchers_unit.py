@@ -9,18 +9,34 @@ import pandas as pd
 def test_get_price_fetcher_returns_twelvedata():
     """Test that get_price_fetcher returns TwelveDataFetcher by default."""
     from degiro_portfolio.price_fetchers import get_price_fetcher, TwelveDataFetcher
+    from degiro_portfolio.config import Config
+    import os
 
-    fetcher = get_price_fetcher()
-    assert isinstance(fetcher, TwelveDataFetcher)
+    # Mock API key for test
+    original_key = os.environ.get('TWELVEDATA_API_KEY')
+    os.environ['TWELVEDATA_API_KEY'] = 'test_key_for_ci'
+
+    try:
+        fetcher = get_price_fetcher()
+        assert isinstance(fetcher, TwelveDataFetcher)
+    finally:
+        # Restore original
+        if original_key:
+            os.environ['TWELVEDATA_API_KEY'] = original_key
+        else:
+            os.environ.pop('TWELVEDATA_API_KEY', None)
 
 
 def test_get_price_fetcher_returns_fmp_when_configured():
     """Test that get_price_fetcher returns FMPFetcher when configured."""
     from degiro_portfolio.price_fetchers import get_price_fetcher, FMPFetcher
     from degiro_portfolio.config import Config
+    import os
 
-    # Save original value
-    original = Config.PRICE_DATA_PROVIDER
+    # Save original values
+    original_provider = Config.PRICE_DATA_PROVIDER
+    original_key = os.environ.get('FMP_API_KEY')
+    os.environ['FMP_API_KEY'] = 'test_key_for_ci'
 
     try:
         # Set to FMP
@@ -30,8 +46,12 @@ def test_get_price_fetcher_returns_fmp_when_configured():
         assert isinstance(fetcher, FMPFetcher)
 
     finally:
-        # Restore original
-        Config.PRICE_DATA_PROVIDER = original
+        # Restore originals
+        Config.PRICE_DATA_PROVIDER = original_provider
+        if original_key:
+            os.environ['FMP_API_KEY'] = original_key
+        else:
+            os.environ.pop('FMP_API_KEY', None)
 
 
 def test_get_price_fetcher_returns_yahoo_when_configured():
@@ -52,16 +72,28 @@ def test_get_price_fetcher_returns_yahoo_when_configured():
 def test_twelvedata_fetcher_normalize_ticker():
     """Test TwelveDataFetcher ticker normalization."""
     from degiro_portfolio.price_fetchers import TwelveDataFetcher
+    import os
 
-    fetcher = TwelveDataFetcher()
+    # Mock API key for test
+    original_key = os.environ.get('TWELVEDATA_API_KEY')
+    os.environ['TWELVEDATA_API_KEY'] = 'test_key_for_ci'
 
-    # Test various ticker formats
-    assert fetcher._normalize_ticker("AAPL") == "AAPL"
-    assert fetcher._normalize_ticker("ASML.AS") == "ASML"
-    assert fetcher._normalize_ticker("SAP.DE") == "SAP"
-    assert fetcher._normalize_ticker("SAAB-B.ST") == "SAAB.B"
-    assert fetcher._normalize_ticker("LDO.MI") == "LDO"
-    assert fetcher._normalize_ticker("RHM.DE") == "RHM"
+    try:
+        fetcher = TwelveDataFetcher()
+
+        # Test various ticker formats
+        assert fetcher._normalize_ticker("AAPL") == "AAPL"
+        assert fetcher._normalize_ticker("ASML.AS") == "ASML"
+        assert fetcher._normalize_ticker("SAP.DE") == "SAP"
+        assert fetcher._normalize_ticker("SAAB-B.ST") == "SAAB.B"
+        assert fetcher._normalize_ticker("LDO.MI") == "LDO"
+        assert fetcher._normalize_ticker("RHM.DE") == "RHM"
+    finally:
+        # Restore original
+        if original_key:
+            os.environ['TWELVEDATA_API_KEY'] = original_key
+        else:
+            os.environ.pop('TWELVEDATA_API_KEY', None)
 
 
 def test_twelvedata_fetcher_fetch_prices():
