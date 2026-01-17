@@ -222,4 +222,4 @@ If you're stuck with advanced setup:
 3. Look at server logs: `degiro-portfolio logs`
 4. Ask for help on GitHub Issues
 
-**For Developers**: See the [Developer Appendix](developer-appendix.md) for technical documentation including API reference, development guide, testing, and deployment options.
+**Note for Programmers**: Technical documentation including API reference, development guide, testing, and deployment is available in the [Developer Appendix](developer-appendix.md).

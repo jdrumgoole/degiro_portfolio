@@ -16,21 +16,13 @@ This downloads and installs the application automatically.
 
 **Don't have Python?** Download it from [python.org](https://www.python.org/downloads/) - you need Python 3.11 or newer.
 
-### Option 2: For Developers
-
-If you prefer using `uv` (a faster Python package manager):
-
-```bash
-uv pip install degiro-portfolio
-```
-
-### Option 3: From Source Code
+### Option 2: Installing from Source
 
 If you downloaded the source code from GitHub:
 
 1. Open Terminal/Command Prompt
 2. Navigate to the folder where you downloaded the code
-3. Run: `uv sync`
+3. Run: `uv sync` (requires uv package manager: `pip install uv`)
 
 ## Quick Start
 
@@ -61,11 +53,17 @@ http://localhost:8000
 
 You should now see the portfolio dashboard!
 
+![Portfolio Dashboard](../screenshots/dashboard-with-buttons.png)
+*The main portfolio dashboard showing your holdings, performance charts, and action buttons*
+
 **What's localhost?** It's a special address that means "this computer". The dashboard only runs on your computer and can't be accessed from anywhere else.
 
 ### 3. Upload Your First Transaction File
 
-#### Exporting from DEGIRO
+![Dashboard with Upload Button](../screenshots/dashboard-with-buttons.png)
+*The main dashboard with the Upload Transactions button in the top-right*
+
+#### Step 1: Export from DEGIRO
 
 1. Log in to your DEGIRO account
 2. Go to **Portfolio** → **Transactions**
@@ -73,7 +71,7 @@ You should now see the portfolio dashboard!
 4. Click **Export** and select **Excel** format
 5. Save the file (typically named `Transactions.xlsx`)
 
-#### Uploading to the Application
+#### Step 2: Upload to the Application
 
 1. Click the **📤 Upload Transactions** button in the top-right corner of the application
 2. Select your DEGIRO `Transactions.xlsx` file
@@ -101,9 +99,26 @@ Stock prices are automatically downloaded when you upload transactions. To get t
 
 **How often should I update?** Stock markets only change during trading hours (weekdays), so updating once per day is usually sufficient.
 
+## What You'll See First
+
+When you first open the application (before uploading any data), you'll see an empty dashboard with the three action buttons at the top. This is normal!
+
+To get started, click the **"📤 Upload Transactions"** button and select your DEGIRO Excel export file.
+
+After uploading, the application will:
+1. Import all your transactions (takes a few seconds)
+2. Download historical prices for all your stocks (takes 1-2 minutes)
+3. Fetch market index data for comparison (S&P 500, Euro Stoxx 50)
+4. Display your complete portfolio with charts
+
+**Be patient on first upload!** The first import takes longer because it downloads all historical price data. Subsequent uploads are much faster.
+
 ## Understanding Your Dashboard
 
 After uploading transactions, you'll see:
+
+![Portfolio Overview](../screenshots/portfolio-overview.png)
+*Complete portfolio view showing summary, stock cards, and detailed charts*
 
 ### Portfolio Summary
 Shows your total portfolio value and overall gain/loss percentage.
@@ -274,10 +289,10 @@ degiro-portfolio status    # Check if server is running
 
 If you're still stuck:
 1. Check the logs for error messages: `degiro-portfolio logs`
-2. Look at the [API Reference](api-reference.md) for technical details
-3. Visit the [GitHub Issues](https://github.com/YOUR_REPO/issues) page
-4. Include these details when asking for help:
+2. Visit the [GitHub Issues](https://github.com/jdrumgoole/degiro-portfolio/issues) page to report the problem
+3. Include these details when asking for help:
    - What you were trying to do
    - What happened instead
-   - Any error messages you saw
+   - Any error messages you saw (from the logs or browser console)
    - Your operating system (Windows/Mac/Linux)
+   - Python version (`python --version`)

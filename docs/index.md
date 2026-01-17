@@ -45,7 +45,7 @@ degiro-portfolio start
 
 Then open your browser to http://localhost:8000 and click "Upload Transactions" to get started!
 
-**For developers**, see the [Getting Started](getting-started.md) guide for more options.
+See the [Getting Started](getting-started.md) guide for detailed installation instructions.
 
 ## Who Is This For?
 
