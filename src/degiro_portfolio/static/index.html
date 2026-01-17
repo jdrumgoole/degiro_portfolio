@@ -517,6 +517,122 @@
             border-radius: 8px;
         }
 
+        /* Custom Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-20px) scale(0.95);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 12px;
+            padding: 32px;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.3s ease;
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .modal-icon {
+            font-size: 48px;
+            line-height: 1;
+        }
+
+        .modal-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2d3748;
+            margin: 0;
+        }
+
+        .modal-message {
+            color: #4a5568;
+            font-size: 16px;
+            line-height: 1.6;
+            margin-bottom: 24px;
+        }
+
+        .modal-message ul {
+            margin: 12px 0;
+            padding-left: 20px;
+        }
+
+        .modal-message li {
+            margin: 8px 0;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .modal-btn {
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-btn-cancel {
+            background: #e2e8f0;
+            color: #4a5568;
+        }
+
+        .modal-btn-cancel:hover {
+            background: #cbd5e0;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+        }
+
+        .modal-btn-danger {
+            background: linear-gradient(135deg, #f56565 0%, #c53030 100%);
+            color: white;
+        }
+
+        .modal-btn-danger:hover {
+            background: linear-gradient(135deg, #fc8181 0%, #e53e3e 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(245, 101, 101, 0.4);
+        }
+
         .summary-label {
             color: #718096;
             font-size: 0.65em;
@@ -1794,47 +1910,98 @@
             }
         }
 
-        async function purgeDatabase() {
-            // Simple confirmation
-            const confirmed = confirm(
-                '⚠️ WARNING: This will DELETE ALL data from the database!\n\n' +
-                'This includes all stocks, transactions, price history, and indices.\n\n' +
-                'This action CANNOT be undone!\n\n' +
-                'Click OK to delete all data, or Cancel to abort.'
-            );
+        // Show custom confirmation modal
+        function showConfirmModal(title, message, icon, onConfirm) {
+            const modal = document.getElementById('purge-modal');
+            modal.innerHTML = `
+                <div class="modal-overlay" onclick="hideConfirmModal(event)">
+                    <div class="modal-content" onclick="event.stopPropagation()">
+                        <div class="modal-header">
+                            <div class="modal-icon">${icon}</div>
+                            <h2 class="modal-title">${title}</h2>
+                        </div>
+                        <div class="modal-message">${message}</div>
+                        <div class="modal-actions">
+                            <button class="modal-btn modal-btn-cancel" onclick="hideConfirmModal()">Cancel</button>
+                            <button class="modal-btn modal-btn-danger" id="confirm-action-btn">Delete All Data</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            modal.style.display = 'block';
 
-            if (!confirmed) {
+            // Add confirm handler
+            document.getElementById('confirm-action-btn').onclick = () => {
+                hideConfirmModal();
+                onConfirm();
+            };
+
+            // Close on ESC key
+            const escHandler = (e) => {
+                if (e.key === 'Escape') {
+                    hideConfirmModal();
+                    document.removeEventListener('keydown', escHandler);
+                }
+            };
+            document.addEventListener('keydown', escHandler);
+        }
+
+        function hideConfirmModal(event) {
+            // Only close if clicking overlay, not content
+            if (event && event.target.classList.contains('modal-content')) {
                 return;
             }
+            const modal = document.getElementById('purge-modal');
+            modal.style.display = 'none';
+            modal.innerHTML = '';
+        }
 
-            try {
-                showUploadStatus('🗑️ Purging database...', true);
+        async function purgeDatabase() {
+            showConfirmModal(
+                'Delete All Data',
+                `
+                    <p><strong>⚠️ WARNING: This will DELETE ALL data from the database!</strong></p>
+                    <p>This includes:</p>
+                    <ul>
+                        <li>All stocks</li>
+                        <li>All transactions</li>
+                        <li>All price history</li>
+                        <li>All indices</li>
+                    </ul>
+                    <p><strong>This action CANNOT be undone!</strong></p>
+                `,
+                '🗑️',
+                async () => {
+                    try {
+                        showUploadStatus('🗑️ Purging database...', true);
 
-                const response = await fetch('/api/purge-database', {
-                    method: 'POST'
-                });
+                        const response = await fetch('/api/purge-database', {
+                            method: 'POST'
+                        });
 
-                const result = await response.json();
+                        const result = await response.json();
 
-                if (result.success) {
-                    showUploadStatus(
-                        `✅ Database purged successfully!\n` +
-                        `Deleted: ${result.deleted.stocks} stocks, ` +
-                        `${result.deleted.transactions} transactions, ` +
-                        `${result.deleted.stock_prices} prices\n` +
-                        `Reloading page...`,
-                        true
-                    );
-                    // Reload page after successful purge
-                    setTimeout(() => {
-                        window.location.reload();
-                    }, 3000);
-                } else {
-                    showUploadStatus('❌ ' + result.message, false);
+                        if (result.success) {
+                            showUploadStatus(
+                                `✅ Database purged successfully!\n` +
+                                `Deleted: ${result.deleted.stocks} stocks, ` +
+                                `${result.deleted.transactions} transactions, ` +
+                                `${result.deleted.stock_prices} prices\n` +
+                                `Reloading page...`,
+                                true
+                            );
+                            // Reload page after successful purge
+                            setTimeout(() => {
+                                window.location.reload();
+                            }, 3000);
+                        } else {
+                            showUploadStatus('❌ ' + result.message, false);
+                        }
+                    } catch (error) {
+                        showUploadStatus('Error purging database: ' + error.message, false);
+                    }
                 }
-            } catch (error) {
-                showUploadStatus('Error purging database: ' + error.message, false);
-            }
+            );
         }
 
         // Live price updates (FMP only)
@@ -1924,5 +2091,10 @@
             startLivePriceUpdates();
         });
     </script>
+
+    <!-- Purge Confirmation Modal -->
+    <div id="purge-modal" style="display: none;">
+        <!-- Modal will be populated by JavaScript -->
+    </div>
 </body>
 </html>
