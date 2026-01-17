@@ -1145,6 +1145,51 @@ async def update_market_data(db: Session = Depends(get_db)):
         )
 
 
+@app.post("/api/purge-database")
+async def purge_database(db: Session = Depends(get_db)):
+    """Purge all data from the database (stocks, transactions, prices, indices).
+
+    WARNING: This is a destructive operation that cannot be undone!
+    """
+    try:
+        # Count records before deletion
+        stock_count = db.query(Stock).count()
+        transaction_count = db.query(Transaction).count()
+        price_count = db.query(StockPrice).count()
+        index_count = db.query(Index).count()
+        index_price_count = db.query(IndexPrice).count()
+
+        # Delete all data in correct order (foreign key constraints)
+        db.query(StockPrice).delete()
+        db.query(Transaction).delete()
+        db.query(Stock).delete()
+        db.query(IndexPrice).delete()
+        db.query(Index).delete()
+
+        db.commit()
+
+        return JSONResponse(
+            content={
+                "success": True,
+                "message": "Database purged successfully",
+                "deleted": {
+                    "stocks": stock_count,
+                    "transactions": transaction_count,
+                    "stock_prices": price_count,
+                    "indices": index_count,
+                    "index_prices": index_price_count
+                }
+            }
+        )
+
+    except Exception as e:
+        db.rollback()
+        return JSONResponse(
+            status_code=500,
+            content={"success": False, "message": f"Error purging database: {str(e)}"}
+        )
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

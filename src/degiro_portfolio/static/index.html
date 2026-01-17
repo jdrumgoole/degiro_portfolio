@@ -76,6 +76,29 @@
             transform: translateY(0);
         }
 
+        .purge-btn {
+            background: linear-gradient(135deg, #f56565 0%, #c53030 100%);
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.85em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(245, 101, 101, 0.3);
+        }
+
+        .purge-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 16px rgba(245, 101, 101, 0.4);
+            background: linear-gradient(135deg, #fc8181 0%, #e53e3e 100%);
+        }
+
+        .purge-btn:active {
+            transform: translateY(0);
+        }
+
         #file-input {
             display: none;
         }
@@ -532,6 +555,9 @@
                     <input type="file" id="file-input" accept=".xlsx,.xls" />
                     <button class="upload-btn" onclick="document.getElementById('file-input').click()">
                         📤 Upload Transactions
+                    </button>
+                    <button class="purge-btn" onclick="purgeDatabase()">
+                        🗑️ Purge All Data
                     </button>
                 </div>
                 <div style="font-size: 11px; color: #718096; margin-top: -4px;">
@@ -1765,6 +1791,64 @@
                 }
             } catch (error) {
                 showUploadStatus('Error updating market data: ' + error.message, false);
+            }
+        }
+
+        async function purgeDatabase() {
+            // First confirmation
+            const firstConfirm = confirm(
+                '⚠️ WARNING: This will DELETE ALL data from the database!\n\n' +
+                'This includes:\n' +
+                '• All stocks\n' +
+                '• All transactions\n' +
+                '• All price history\n' +
+                '• All indices\n\n' +
+                'This action CANNOT be undone!\n\n' +
+                'Are you sure you want to continue?'
+            );
+
+            if (!firstConfirm) {
+                return;
+            }
+
+            // Second confirmation (type confirmation)
+            const secondConfirm = prompt(
+                'To confirm deletion, please type: DELETE ALL DATA\n\n' +
+                '(Type exactly as shown, in capital letters)'
+            );
+
+            if (secondConfirm !== 'DELETE ALL DATA') {
+                alert('Purge cancelled - confirmation text did not match.');
+                return;
+            }
+
+            try {
+                showUploadStatus('🗑️ Purging database...', true);
+
+                const response = await fetch('/api/purge-database', {
+                    method: 'POST'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showUploadStatus(
+                        `✅ Database purged successfully!\n` +
+                        `Deleted: ${result.deleted.stocks} stocks, ` +
+                        `${result.deleted.transactions} transactions, ` +
+                        `${result.deleted.stock_prices} prices\n` +
+                        `Reloading page...`,
+                        true
+                    );
+                    // Reload page after successful purge
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 3000);
+                } else {
+                    showUploadStatus('❌ ' + result.message, false);
+                }
+            } catch (error) {
+                showUploadStatus('Error purging database: ' + error.message, false);
             }
         }
 
