@@ -129,7 +129,7 @@ Try verifying the ticker manually at https://finance.yahoo.com
 
 If you were using an older version with hard-coded `ISIN_TO_TICKER` mappings:
 
-1. Delete your old database: `rm degiro-portfolio.db`
+1. Delete your old database: `rm degiro_portfolio.db`
 2. Re-import your transactions: `uv run invoke import-data`
 3. Fetch prices: `uv run invoke fetch-prices`
 

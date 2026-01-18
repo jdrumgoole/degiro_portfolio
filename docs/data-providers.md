@@ -154,8 +154,8 @@ TWELVEDATA_API_KEY=paste_your_api_key_here
 ### Step 3: Save and Restart
 
 1. Save the `.env` file
-2. Stop the server: `degiro-portfolio stop`
-3. Start it again: `degiro-portfolio start`
+2. Stop the server: `degiro_portfolio stop`
+3. Start it again: `degiro_portfolio start`
 4. Click "📈 Update Market Data" in the web interface to download prices with the new provider
 
 **That's it!** The application will now use your chosen provider for all price data.

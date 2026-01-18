@@ -3,10 +3,10 @@
 DEGIRO Portfolio CLI - Manage the portfolio visualization application.
 
 Usage:
-    degiro-portfolio start    - Start the application server
-    degiro-portfolio stop     - Stop the application server
-    degiro-portfolio restart  - Restart the application server
-    degiro-portfolio status   - Check application status
+    degiro_portfolio start    - Start the application server
+    degiro_portfolio stop     - Stop the application server
+    degiro_portfolio restart  - Restart the application server
+    degiro_portfolio status   - Check application status
 """
 import os
 import sys
@@ -19,8 +19,8 @@ from pathlib import Path
 
 # Configuration
 PROJECT_ROOT = Path(__file__).parent.absolute()
-PID_FILE = PROJECT_ROOT / ".degiro-portfolio.pid"
-LOG_FILE = PROJECT_ROOT / "degiro-portfolio.log"
+PID_FILE = PROJECT_ROOT / ".degiro_portfolio.pid"
+LOG_FILE = PROJECT_ROOT / "degiro_portfolio.log"
 HOST = "0.0.0.0"
 PORT = 8000
 
@@ -188,10 +188,10 @@ Commands:
   status   Show server status
 
 Examples:
-  degiro-portfolio start
-  degiro-portfolio stop
-  degiro-portfolio restart
-  degiro-portfolio status
+  degiro_portfolio start
+  degiro_portfolio stop
+  degiro_portfolio restart
+  degiro_portfolio status
         """
     )
 

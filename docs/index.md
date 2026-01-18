@@ -39,8 +39,8 @@ This application takes your DEGIRO transaction exports (the Excel files you down
 **For most users**, we recommend installing from PyPI:
 
 ```bash
-pip install degiro-portfolio
-degiro-portfolio start
+pip install degiro_portfolio
+degiro_portfolio start
 ```
 
 Then open your browser to http://localhost:8000 and click "Upload Transactions" to get started!

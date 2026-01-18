@@ -21,7 +21,7 @@ class Config:
     PROJECT_ROOT = Path(__file__).parent.parent.parent
     DB_PATH = os.environ.get(
         'DEGIRO_PORTFOLIO_DB',
-        str(PROJECT_ROOT / 'degiro-portfolio.db')
+        str(PROJECT_ROOT / 'degiro_portfolio.db')
     )
     DEFAULT_TRANSACTIONS_FILE = PROJECT_ROOT / 'Transactions.xlsx'
 

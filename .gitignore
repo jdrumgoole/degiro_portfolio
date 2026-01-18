@@ -38,8 +38,8 @@ env/
 *.db
 *.sqlite
 *.sqlite3
-.degiro-portfolio.pid
-degiro-portfolio.log
+.degiro_portfolio.pid
+degiro_portfolio.log
 .stockchart.pid
 stockchart.log
 

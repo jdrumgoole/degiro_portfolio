@@ -351,7 +351,7 @@ The charts are designed to answer specific questions about your investments:
 If you need to troubleshoot issues, you can view the server logs:
 
 ```bash
-degiro-portfolio logs
+degiro_portfolio logs
 ```
 
 This shows recent activity and any error messages.

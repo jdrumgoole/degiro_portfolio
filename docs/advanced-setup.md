@@ -16,13 +16,13 @@ Simply keep the terminal window open while the server is running. Don't close it
 
 ```bash
 # Start server in background
-nohup degiro-portfolio start > server.log 2>&1 &
+nohup degiro_portfolio start > server.log 2>&1 &
 
 # Check if it's running
-degiro-portfolio status
+degiro_portfolio status
 
 # Stop it later
-degiro-portfolio stop
+degiro_portfolio stop
 ```
 
 ### Option 3: Windows Service
@@ -59,10 +59,10 @@ When starting the server, use:
 
 ```bash
 # Linux/Mac
-HOST=0.0.0.0 degiro-portfolio start
+HOST=0.0.0.0 degiro_portfolio start
 
 # Windows
-set HOST=0.0.0.0 && degiro-portfolio start
+set HOST=0.0.0.0 && degiro_portfolio start
 ```
 
 ### Step 3: Access from Other Devices
@@ -82,12 +82,12 @@ If port 8000 is already in use, you can change it:
 
 **Linux/Mac:**
 ```bash
-PORT=8080 degiro-portfolio start
+PORT=8080 degiro_portfolio start
 ```
 
 **Windows:**
 ```bash
-set PORT=8080 && degiro-portfolio start
+set PORT=8080 && degiro_portfolio start
 ```
 
 Then access at: `http://localhost:8080`
@@ -98,12 +98,12 @@ By default, the database file is created in your current directory. To use a dif
 
 **Linux/Mac:**
 ```bash
-DATABASE_URL=sqlite:////path/to/my/data/portfolio.db degiro-portfolio start
+DATABASE_URL=sqlite:////path/to/my/data/portfolio.db degiro_portfolio start
 ```
 
 **Windows:**
 ```bash
-set DATABASE_URL=sqlite:///C:/Users/YourName/Documents/portfolio.db && degiro-portfolio start
+set DATABASE_URL=sqlite:///C:/Users/YourName/Documents/portfolio.db && degiro_portfolio start
 ```
 
 ## Creating a Permanent Configuration
@@ -120,7 +120,7 @@ HOST=0.0.0.0
 PORT=8000
 
 # Database Location
-DATABASE_URL=sqlite:///degiro-portfolio.db
+DATABASE_URL=sqlite:///degiro_portfolio.db
 
 # Data Provider (optional)
 PRICE_DATA_PROVIDER=yahoo
@@ -132,7 +132,7 @@ Save the file and restart the server. It will automatically use these settings.
 
 ## Backing Up Your Data
 
-Your portfolio data is stored in a single file: `degiro-portfolio.db`
+Your portfolio data is stored in a single file: `degiro_portfolio.db`
 
 ### Simple Backup
 
@@ -140,12 +140,12 @@ Just copy this file to a safe location:
 
 **Mac/Linux:**
 ```bash
-cp degiro-portfolio.db ~/Backups/portfolio-backup-$(date +%Y%m%d).db
+cp degiro_portfolio.db ~/Backups/portfolio-backup-$(date +%Y%m%d).db
 ```
 
 **Windows:**
 ```bash
-copy degiro-portfolio.db C:\Backups\portfolio-backup.db
+copy degiro_portfolio.db C:\Backups\portfolio-backup.db
 ```
 
 ### Automatic Daily Backup (Mac/Linux)
@@ -156,7 +156,7 @@ Create a scheduled task to back up daily:
 2. Run: `crontab -e`
 3. Add this line:
    ```
-   0 2 * * * cp /path/to/degiro-portfolio.db /path/to/backups/portfolio-$(date +\%Y\%m\%d).db
+   0 2 * * * cp /path/to/degiro_portfolio.db /path/to/backups/portfolio-$(date +\%Y\%m\%d).db
    ```
 
 This backs up your database every day at 2 AM.
@@ -175,10 +175,10 @@ You can run multiple instances for different portfolios:
 
 ```bash
 # Portfolio 1 on port 8000
-DATABASE_URL=sqlite:///portfolio1.db PORT=8000 degiro-portfolio start
+DATABASE_URL=sqlite:///portfolio1.db PORT=8000 degiro_portfolio start
 
 # Portfolio 2 on port 8001 (in another terminal)
-DATABASE_URL=sqlite:///portfolio2.db PORT=8001 degiro-portfolio start
+DATABASE_URL=sqlite:///portfolio2.db PORT=8001 degiro_portfolio start
 ```
 
 Access them at:
@@ -219,7 +219,7 @@ If you're stuck with advanced setup:
 
 1. Try the basic setup first to make sure everything works
 2. Check the [Troubleshooting section](getting-started.md#troubleshooting) in Getting Started
-3. Look at server logs: `degiro-portfolio logs`
+3. Look at server logs: `degiro_portfolio logs`
 4. Ask for help on GitHub Issues
 
 **Note for Programmers**: Technical documentation including API reference, development guide, testing, and deployment is available in the [Developer Appendix](developer-appendix.md).

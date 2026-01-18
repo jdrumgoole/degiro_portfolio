@@ -18,7 +18,7 @@ python --version
 Open Terminal (Mac/Linux) or Command Prompt (Windows) and run:
 
 ```bash
-pip install degiro-portfolio
+pip install degiro_portfolio
 ```
 
 This downloads and installs the application automatically.
@@ -32,7 +32,7 @@ This downloads and installs the application automatically.
 After installation, start the application by running:
 
 ```bash
-degiro-portfolio start
+degiro_portfolio start
 ```
 
 **On Windows**, you might need to run:
@@ -189,10 +189,10 @@ See [Data Providers](data-providers.md) for detailed information about each prov
 Start/stop the server using these commands:
 
 ```bash
-degiro-portfolio start     # Start the server
-degiro-portfolio stop      # Stop the server
-degiro-portfolio restart   # Restart the server
-degiro-portfolio status    # Check if server is running
+degiro_portfolio start     # Start the server
+degiro_portfolio stop      # Stop the server
+degiro_portfolio restart   # Restart the server
+degiro_portfolio status    # Check if server is running
 ```
 
 ## Next Steps
@@ -205,7 +205,7 @@ degiro-portfolio status    # Check if server is running
 
 ### The application won't start
 
-**Problem**: Running `degiro-portfolio start` gives an error.
+**Problem**: Running `degiro_portfolio start` gives an error.
 
 **Solutions**:
 - Make sure Python 3.11+ is installed: Run `python --version` to check
@@ -218,7 +218,7 @@ degiro-portfolio status    # Check if server is running
 **Problem**: Browser shows "This site can't be reached" or "Connection refused".
 
 **Solutions**:
-- Make sure the server is running: Run `degiro-portfolio status`
+- Make sure the server is running: Run `degiro_portfolio status`
 - Try the URL exactly: `http://localhost:8000` (not https://)
 - Try `http://127.0.0.1:8000` instead
 - Check if your firewall is blocking port 8000
@@ -280,7 +280,7 @@ degiro-portfolio status    # Check if server is running
 **Problem**: Server stops running after a while.
 
 **Solutions**:
-- Check the logs: `degiro-portfolio logs` (or check server.log file)
+- Check the logs: `degiro_portfolio logs` (or check server.log file)
 - Make sure you have enough disk space
 - Check if your computer goes to sleep - keep it awake
 - Run in a terminal that stays open (don't close the terminal window)
@@ -288,7 +288,7 @@ degiro-portfolio status    # Check if server is running
 ### Need More Help?
 
 If you're still stuck:
-1. Check the logs for error messages: `degiro-portfolio logs`
+1. Check the logs for error messages: `degiro_portfolio logs`
 2. Visit the [GitHub Issues](https://github.com/jdrumgoole/degiro_portfolio/issues) page to report the problem
 3. Include these details when asking for help:
    - What you were trying to do

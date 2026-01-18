@@ -38,7 +38,7 @@ See `config.py` for full implementation.
 **Status:** RESOLVED
 
 **Implementation:**
-- Database renamed from `stockchart.db` to `degiro-portfolio.db`
+- Database renamed from `stockchart.db` to `degiro_portfolio.db`
 - Application title updated to "DEGIRO Portfolio"
 - Database path now supports environment variable `DEGIRO_PORTFOLIO_DB`
 
@@ -77,7 +77,7 @@ INDICES = {
 
 ### 4. **Server Configuration**
 
-**Location:** `degiro-portfolio` CLI script, `tasks.py`, `src/degiro_portfolio/main.py`
+**Location:** `degiro_portfolio` CLI script, `tasks.py`, `src/degiro_portfolio/main.py`
 
 **Hard-coded values:**
 ```python
@@ -173,7 +173,7 @@ app = FastAPI(title="Stock Price Visualizer", version="0.1.0")
 
 ### Immediate (Before Next Release)
 
-1. **Rename database file** from `stockchart.db` to `degiro-portfolio.db`
+1. **Rename database file** from `stockchart.db` to `degiro_portfolio.db`
 2. **Update application title** from "Stock Price Visualizer" to "DEGIRO Portfolio"
 
 ### Short-term (Next Major Version)
@@ -207,7 +207,7 @@ class Config:
     PROJECT_ROOT = Path(__file__).parent.parent.parent
     DB_PATH = os.environ.get(
         'DEGIRO_PORTFOLIO_DB',
-        str(PROJECT_ROOT / 'degiro-portfolio.db')
+        str(PROJECT_ROOT / 'degiro_portfolio.db')
     )
     DEFAULT_TRANSACTIONS_FILE = PROJECT_ROOT / 'Transactions.xlsx'
 

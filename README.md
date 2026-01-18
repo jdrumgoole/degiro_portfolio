@@ -44,7 +44,7 @@ python --version
 Open Terminal (Mac/Linux) or Command Prompt (Windows) and run:
 
 ```bash
-pip install degiro-portfolio
+pip install degiro_portfolio
 ```
 
 That's it! The application is now installed.
@@ -54,7 +54,7 @@ That's it! The application is now installed.
 Run this command:
 
 ```bash
-degiro-portfolio start
+degiro_portfolio start
 ```
 
 **On Windows**, if that doesn't work, try:
@@ -96,13 +96,13 @@ Click the **📈 Update Market Data** button to refresh all stock prices.
 ### Managing the Server
 
 ```bash
-degiro-portfolio start    # Start the server
-degiro-portfolio stop     # Stop the server
-degiro-portfolio restart  # Restart the server
-degiro-portfolio status   # Check if it's running
+degiro_portfolio start    # Start the server
+degiro_portfolio stop     # Stop the server
+degiro_portfolio restart  # Restart the server
+degiro_portfolio status   # Check if it's running
 ```
 
-**On Windows**, replace `degiro-portfolio` with `python -m degiro_portfolio` in the commands above.
+**On Windows**, replace `degiro_portfolio` with `python -m degiro_portfolio` in the commands above.
 
 ### Clearing All Data
 
@@ -147,7 +147,7 @@ Click any stock card to see:
 ## Data Privacy
 
 All your financial data stays on your computer:
-- ✅ Data stored locally in `degiro-portfolio.db`
+- ✅ Data stored locally in `degiro_portfolio.db`
 - ✅ Only connects to internet for stock prices
 - ❌ Does NOT send your transaction data anywhere
 - ❌ Does NOT require creating an account
@@ -156,8 +156,8 @@ All your financial data stays on your computer:
 
 ### The server won't start
 - Make sure port 8000 isn't already in use
-- Check if it's running: `degiro-portfolio status`
-- Try restarting: `degiro-portfolio restart`
+- Check if it's running: `degiro_portfolio status`
+- Try restarting: `degiro_portfolio restart`
 
 ### My stocks don't show prices
 - Click the "Update Market Data" button
@@ -168,7 +168,7 @@ All your financial data stays on your computer:
 - Verify the file isn't corrupted
 
 ### I see a "Connection refused" error
-- The server isn't running - start it with: `degiro-portfolio start`
+- The server isn't running - start it with: `degiro_portfolio start`
 
 ## Getting Help
 

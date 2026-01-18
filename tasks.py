@@ -19,7 +19,7 @@ Usage:
 
     Test Server (Port 8001):
         invoke test-full-setup       - Set up test database and start test server on port 8001
-        invoke test-server-start     - Start test server (--port 8001, --database degiro-portfolio-test.db)
+        invoke test-server-start     - Start test server (--port 8001, --database degiro_portfolio-test.db)
         invoke test-server-stop      - Stop test server (--port 8001)
         invoke test-server-restart   - Restart test server
         invoke test-server-status    - Check test server status
@@ -50,25 +50,25 @@ PROJECT_ROOT = Path(__file__).parent
 @task
 def start(c):
     """Start the DEGIRO Portfolio server."""
-    c.run("./degiro-portfolio start", pty=True)
+    c.run("./degiro_portfolio start", pty=True)
 
 
 @task
 def stop(c):
     """Stop the Stock Chart server."""
-    c.run("./degiro-portfolio stop", pty=True)
+    c.run("./degiro_portfolio stop", pty=True)
 
 
 @task
 def restart(c):
     """Restart the Stock Chart server."""
-    c.run("./degiro-portfolio restart", pty=True)
+    c.run("./degiro_portfolio restart", pty=True)
 
 
 @task
 def status(c):
     """Check server status."""
-    c.run("./degiro-portfolio status", pty=True)
+    c.run("./degiro_portfolio status", pty=True)
 
 
 @task
@@ -130,7 +130,7 @@ def demo_setup(c):
 def purge_data(c):
     """Purge all portfolio data (removes database only) and restart server."""
     print("⚠️  WARNING: This will delete all portfolio data (stocks, transactions, prices)")
-    print("   Database file will be removed: degiro-portfolio.db")
+    print("   Database file will be removed: degiro_portfolio.db")
 
     response = input("\n   Are you sure you want to continue? (yes/no): ")
 
@@ -144,7 +144,7 @@ def purge_data(c):
 
         # Purge the database files
         db_files = [
-            "degiro-portfolio.db",
+            "degiro_portfolio.db",
             "stockchart.db",  # Legacy database name
         ]
 
@@ -180,9 +180,9 @@ def prodclean(c):
     print("🧹 Cleaning production files...")
 
     files_to_remove = [
-        ".degiro-portfolio.pid",
-        "degiro-portfolio.log",
-        "degiro-portfolio.db",
+        ".degiro_portfolio.pid",
+        "degiro_portfolio.log",
+        "degiro_portfolio.db",
         "stockchart.db",  # Legacy database name
         ".stockchart.pid",  # Legacy PID file
         "stockchart.log",   # Legacy log file
@@ -208,9 +208,9 @@ def testclean(c):
     print("🧹 Cleaning test files...")
 
     files_to_remove = [
-        "degiro-portfolio-test.db",
-        ".degiro-portfolio-test.pid",
-        "degiro-portfolio-test.log",
+        "degiro_portfolio-test.db",
+        ".degiro_portfolio-test.pid",
+        "degiro_portfolio-test.log",
     ]
 
     for file in files_to_remove:
@@ -282,7 +282,7 @@ def reset(c):
 @task
 def logs(c, lines=50):
     """Show server logs."""
-    log_file = PROJECT_ROOT / "degiro-portfolio.log"
+    log_file = PROJECT_ROOT / "degiro_portfolio.log"
     # Fall back to old log file name for backwards compatibility
     if not log_file.exists():
         log_file = PROJECT_ROOT / "stockchart.log"
@@ -386,7 +386,7 @@ def help_tasks(c):
 # ============================================================================
 
 @task
-def test_server_start(c, port=8001, database="degiro-portfolio-test.db"):
+def test_server_start(c, port=8001, database="degiro_portfolio-test.db"):
     """Start test server on specified port with test database."""
     c.run(f"uv run python test_server.py start --port {port} --database {database}", pty=True)
 
@@ -398,7 +398,7 @@ def test_server_stop(c, port=8001):
 
 
 @task
-def test_server_restart(c, port=8001, database="degiro-portfolio-test.db"):
+def test_server_restart(c, port=8001, database="degiro_portfolio-test.db"):
     """Restart test server on specified port."""
     c.run(f"uv run python test_server.py restart --port {port} --database {database}", pty=True)
 
@@ -410,7 +410,7 @@ def test_server_status(c, port=8001):
 
 
 @task
-def setup_test_db(c, database="degiro-portfolio-test.db"):
+def setup_test_db(c, database="degiro_portfolio-test.db"):
     """Set up test database with example data."""
     db_path = f"$(pwd)/{database}"
 
@@ -454,4 +454,4 @@ def test_full_setup(c, port=8001):
 
     print(f"\n✅ Test environment ready!")
     print(f"   URL: http://localhost:{port}")
-    print(f"   Database: degiro-portfolio-test.db")
+    print(f"   Database: degiro_portfolio-test.db")

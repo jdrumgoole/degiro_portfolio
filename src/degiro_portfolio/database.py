@@ -11,7 +11,7 @@ def get_database_url():
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
         # Default: Database in project root (two directories up from this file)
-        db_path = os.path.join(os.path.dirname(__file__), "..", "..", "degiro-portfolio.db")
+        db_path = os.path.join(os.path.dirname(__file__), "..", "..", "degiro_portfolio.db")
         database_url = f"sqlite:///{os.path.abspath(db_path)}"
     return database_url
 

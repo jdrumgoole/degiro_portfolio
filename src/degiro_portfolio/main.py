@@ -75,7 +75,7 @@ def ensure_indices_exist(db: Session) -> tuple[int, int]:
     return indices_created, prices_fetched
 
 
-app = FastAPI(title="DEGIRO Portfolio", version="0.3.5")
+app = FastAPI(title="DEGIRO Portfolio", version="0.3.7")
 
 # Track server start time
 SERVER_START_TIME = datetime.now()
@@ -167,51 +167,108 @@ async def root():
 
 @app.get("/api/holdings")
 async def get_holdings(db: Session = Depends(get_db)):
-    """Get all current stock holdings."""
-    stocks = db.query(Stock).all()
+    """Get all current stock holdings.
 
+    Optimized to use bulk queries instead of N+1 pattern.
+    """
+    from collections import defaultdict
+
+    # Single query to get all stocks with their holdings and transaction counts
+    # This replaces N individual queries with one aggregation query
+    holdings_data = db.query(
+        Stock,
+        func.sum(Transaction.quantity).label('total_qty'),
+        func.count(Transaction.id).label('trans_count')
+    ).join(Transaction, Stock.id == Transaction.stock_id).group_by(Stock.id).all()
+
+    if not holdings_data:
+        return {"holdings": []}
+
+    # Filter to stocks with positive holdings
+    active_holdings = [(stock, int(qty), count) for stock, qty, count in holdings_data if qty and qty > 0]
+
+    if not active_holdings:
+        return {"holdings": []}
+
+    # Get stock IDs for bulk price fetch
+    stock_ids = [stock.id for stock, _, _ in active_holdings]
+
+    # Bulk fetch latest prices using a subquery to get max date per stock
+    from sqlalchemy import and_
+    from sqlalchemy.orm import aliased
+
+    # Subquery to get the latest date for each stock
+    latest_date_subq = db.query(
+        StockPrice.stock_id,
+        func.max(StockPrice.date).label('max_date')
+    ).filter(StockPrice.stock_id.in_(stock_ids)).group_by(StockPrice.stock_id).subquery()
+
+    # Join to get full price records for latest dates
+    latest_prices = db.query(StockPrice).join(
+        latest_date_subq,
+        and_(
+            StockPrice.stock_id == latest_date_subq.c.stock_id,
+            StockPrice.date == latest_date_subq.c.max_date
+        )
+    ).all()
+
+    # Build lookup dict: stock_id -> latest price record
+    latest_price_by_stock = {p.stock_id: p for p in latest_prices}
+
+    # Bulk fetch second-latest prices for change calculation
+    # Get the second max date per stock
+    second_latest_subq = db.query(
+        StockPrice.stock_id,
+        func.max(StockPrice.date).label('second_max_date')
+    ).filter(
+        StockPrice.stock_id.in_(stock_ids)
+    ).filter(
+        ~StockPrice.date.in_(
+            db.query(latest_date_subq.c.max_date).filter(
+                latest_date_subq.c.stock_id == StockPrice.stock_id
+            )
+        )
+    ).group_by(StockPrice.stock_id).subquery()
+
+    previous_prices = db.query(StockPrice).join(
+        second_latest_subq,
+        and_(
+            StockPrice.stock_id == second_latest_subq.c.stock_id,
+            StockPrice.date == second_latest_subq.c.second_max_date
+        )
+    ).all()
+
+    # Build lookup dict: stock_id -> previous price record
+    prev_price_by_stock = {p.stock_id: p for p in previous_prices}
+
+    # Build response
     holdings = []
-    for stock in stocks:
-        total_qty = db.query(func.sum(Transaction.quantity)).filter_by(
-            stock_id=stock.id
-        ).scalar() or 0
+    for stock, total_qty, trans_count in active_holdings:
+        latest_price_record = latest_price_by_stock.get(stock.id)
 
-        if total_qty > 0:
-            trans_count = db.query(Transaction).filter_by(stock_id=stock.id).count()
+        latest_price = None
+        price_change_pct = None
+        price_date = None
+        price_currency = None
 
-            # Get latest and previous prices
-            latest_price_record = db.query(StockPrice).filter_by(
-                stock_id=stock.id
-            ).order_by(StockPrice.date.desc()).first()
+        if latest_price_record:
+            latest_price = latest_price_record.close
+            price_date = latest_price_record.date.strftime("%Y-%m-%d")
+            price_currency = latest_price_record.currency
 
-            latest_price = None
-            price_change_pct = None
-            price_date = None
-            price_currency = None
+            prev_price_record = prev_price_by_stock.get(stock.id)
+            if prev_price_record and prev_price_record.close > 0:
+                price_change_pct = ((latest_price - prev_price_record.close) / prev_price_record.close) * 100
 
-            if latest_price_record:
-                latest_price = latest_price_record.close
-                price_date = latest_price_record.date.strftime("%Y-%m-%d")
-                price_currency = latest_price_record.currency  # Get actual price currency
-
-                # Get previous price (day before latest)
-                previous_price_record = db.query(StockPrice).filter(
-                    StockPrice.stock_id == stock.id,
-                    StockPrice.date < latest_price_record.date
-                ).order_by(StockPrice.date.desc()).first()
-
-                if previous_price_record and previous_price_record.close > 0:
-                    price_change_pct = ((latest_price - previous_price_record.close) / previous_price_record.close) * 100
-
-            holdings.append(StockInfo(
-                stock,
-                int(total_qty),
-                trans_count,
-                latest_price,
-                price_change_pct,
-                price_date,
-                price_currency  # Pass actual price currency
-            ).to_dict())
+        holdings.append(StockInfo(
+            stock,
+            total_qty,
+            trans_count,
+            latest_price,
+            price_change_pct,
+            price_date,
+            price_currency
+        ).to_dict())
 
     return {"holdings": holdings}
 
@@ -408,47 +465,49 @@ async def get_chart_data(stock_id: int, db: Session = Depends(get_db)):
         stock_normalized = []
 
     # Calculate position value as percentage of net investment (buys - sells)
+    # Optimized: use incremental approach instead of modifying dict during iteration
     position_percentage = []
     if prices and transactions:
+        # Sort transactions by date for incremental processing
+        sorted_trans = sorted(transactions, key=lambda t: t.date)
+        trans_idx = 0
         cumulative_shares = 0
-        net_invested = 0
+        net_invested = 0.0
 
-        # Build transaction lookup by date
-        trans_by_date = {}
-        for t in transactions:
-            date_key = t.date.strftime("%Y-%m-%d")
-            if date_key not in trans_by_date:
-                trans_by_date[date_key] = []
-            trans_by_date[date_key].append(t)
+        # Pre-compute exchange rate lookup (most recent rate up to each date)
+        exchange_rate_by_date = {}
+        last_rate = None
+        for t in sorted_trans:
+            if t.exchange_rate:
+                last_rate = t.exchange_rate
+            exchange_rate_by_date[t.date.strftime("%Y-%m-%d")] = last_rate
 
         for price in prices:
             price_date = price.date.strftime("%Y-%m-%d")
 
-            # Update cumulative shares and net investment for any transactions on or before this date
-            for trans_date, trans_list in trans_by_date.items():
-                if trans_date <= price_date:
-                    for t in trans_list:
-                        cumulative_shares += t.quantity
-                        # Net invested = buys - sells
-                        if t.quantity > 0:  # Buy
-                            net_invested += abs(t.total_eur)
-                        else:  # Sell
-                            net_invested -= abs(t.total_eur)
-                    # Remove processed transactions
-                    del trans_by_date[trans_date]
-                    break
+            # Process all transactions up to this price date (incremental)
+            while trans_idx < len(sorted_trans) and sorted_trans[trans_idx].date.strftime("%Y-%m-%d") <= price_date:
+                t = sorted_trans[trans_idx]
+                cumulative_shares += t.quantity
+                # Net invested = buys - sells
+                if t.quantity > 0:  # Buy
+                    net_invested += abs(t.total_eur)
+                else:  # Sell
+                    net_invested -= abs(t.total_eur)
+                trans_idx += 1
 
             # Calculate current value with proper currency conversion
             if net_invested > 0 and cumulative_shares > 0:
-                # Convert price to EUR using actual exchange currency, not DEGIRO transaction currency
+                # Convert price to EUR using actual exchange currency
                 if price.currency == 'EUR':
                     price_eur = price.close
                 else:
-                    # Get most recent exchange rate from transactions on or before this date
+                    # Get most recent exchange rate
                     exchange_rate = None
-                    for t in transactions:
-                        if t.date.strftime("%Y-%m-%d") <= price_date and t.exchange_rate:
-                            exchange_rate = t.exchange_rate
+                    for t_date in sorted(exchange_rate_by_date.keys(), reverse=True):
+                        if t_date <= price_date and exchange_rate_by_date[t_date]:
+                            exchange_rate = exchange_rate_by_date[t_date]
+                            break
 
                     if exchange_rate:
                         price_eur = price.close / exchange_rate
@@ -963,21 +1022,24 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
 
 @app.post("/api/refresh-live-prices")
 async def refresh_live_prices(db: Session = Depends(get_db)):
-    """Fetch real-time price quotes for currently held stocks using Twelve Data or Yahoo Finance."""
+    """Fetch real-time price quotes for currently held stocks using Twelve Data or Yahoo Finance.
+
+    Optimized to use bulk query for holdings calculation.
+    """
     try:
         from .price_fetchers import get_price_fetcher
         from .fetch_prices import YAHOO_FINANCE_OVERRIDE
         import yfinance as yf
 
-        # Get currently held stocks
-        all_stocks = db.query(Stock).all()
-        current_holdings = []
-        for stock in all_stocks:
-            total_qty = db.query(func.sum(Transaction.quantity)).filter_by(
-                stock_id=stock.id
-            ).scalar() or 0
-            if total_qty > 0:
-                current_holdings.append(stock)
+        # Bulk query to get stocks with positive holdings (single query instead of N queries)
+        holdings_query = db.query(
+            Stock,
+            func.sum(Transaction.quantity).label('total_qty')
+        ).join(Transaction, Stock.id == Transaction.stock_id).group_by(Stock.id).having(
+            func.sum(Transaction.quantity) > 0
+        ).all()
+
+        current_holdings = [stock for stock, qty in holdings_query]
 
         # Fetch quotes for all holdings
         quotes = []
@@ -1077,7 +1139,10 @@ async def refresh_live_prices(db: Session = Depends(get_db)):
 
 @app.post("/api/update-market-data")
 async def update_market_data(db: Session = Depends(get_db)):
-    """Fetch latest market data for currently held stocks and indices."""
+    """Fetch latest market data for currently held stocks and indices.
+
+    Optimized to use bulk query for holdings calculation.
+    """
     try:
         updated_stocks = 0
         updated_indices = 0
@@ -1087,18 +1152,15 @@ async def update_market_data(db: Session = Depends(get_db)):
         fetcher = get_price_fetcher()
         provider = Config.PRICE_DATA_PROVIDER
 
-        # Update stock prices - only for currently held stocks
-        all_stocks = db.query(Stock).all()
+        # Bulk query to get stocks with positive holdings (single query instead of N queries)
+        holdings_query = db.query(
+            Stock,
+            func.sum(Transaction.quantity).label('total_qty')
+        ).join(Transaction, Stock.id == Transaction.stock_id).group_by(Stock.id).having(
+            func.sum(Transaction.quantity) > 0
+        ).all()
 
-        # Filter to stocks with current holdings
-        current_holdings = []
-        for stock in all_stocks:
-            total_qty = db.query(func.sum(Transaction.quantity)).filter_by(
-                stock_id=stock.id
-            ).scalar() or 0
-
-            if total_qty > 0:
-                current_holdings.append(stock)
+        current_holdings = [stock for stock, qty in holdings_query]
 
         for stock in current_holdings:
             try:

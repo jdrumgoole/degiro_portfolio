@@ -328,7 +328,7 @@ Currently, there are no rate limits on the API. However, be mindful of:
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd degiro-portfolio
+cd degiro_portfolio
 
 # Install dependencies including dev dependencies
 uv sync
@@ -340,7 +340,7 @@ uv run playwright install chromium --with-deps
 ### Project Structure
 
 ```
-degiro-portfolio/
+degiro_portfolio/
 ├── src/degiro_portfolio/      # Main application code
 │   ├── __init__.py
 │   ├── config.py             # Configuration management
@@ -360,7 +360,7 @@ degiro-portfolio/
 ├── docs/                    # Sphinx documentation
 ├── .github/                 # GitHub Actions workflows
 ├── tasks.py                 # Invoke tasks
-├── degiro-portfolio         # CLI script
+├── degiro_portfolio         # CLI script
 └── pyproject.toml          # Project configuration
 ```
 
@@ -507,7 +507,7 @@ tail -f server.log
 uv run invoke db-info
 
 # SQLite command line
-sqlite3 degiro-portfolio.db
+sqlite3 degiro_portfolio.db
 
 # Example queries
 .tables
@@ -716,7 +716,7 @@ def test_example(page: Page):
 
 Tests use an isolated test database to avoid affecting production data:
 
-- **Test DB**: `test-degiro-portfolio.db`
+- **Test DB**: `test-degiro_portfolio.db`
 - **Test Port**: 8001 (production uses 8000)
 - **Automatic Cleanup**: Database is deleted after tests
 
@@ -886,9 +886,9 @@ The DEGIRO Portfolio package is automatically published to PyPI using GitHub Act
 **Option 1: PyPI Trusted Publishing** (Recommended):
 1. Go to https://pypi.org/manage/account/publishing/
 2. Add a new publisher:
-   - **PyPI Project Name**: `degiro-portfolio`
+   - **PyPI Project Name**: `degiro_portfolio`
    - **Owner**: Your GitHub username
-   - **Repository**: `degiro-portfolio`
+   - **Repository**: `degiro_portfolio`
    - **Workflow name**: `publish.yml`
    - **Environment name**: `pypi`
 
@@ -950,10 +950,10 @@ twine upload dist/*
 Once published, users can install via:
 
 ```bash
-pip install degiro-portfolio
+pip install degiro_portfolio
 
 # Or with uv
-uv pip install degiro-portfolio
+uv pip install degiro_portfolio
 ```
 
 ### Docker Deployment
@@ -978,17 +978,17 @@ RUN uv sync
 EXPOSE 8000
 
 # Start server
-CMD ["./degiro-portfolio", "start"]
+CMD ["./degiro_portfolio", "start"]
 ```
 
 Build and run:
 
 ```bash
 # Build image
-docker build -t degiro-portfolio .
+docker build -t degiro_portfolio .
 
 # Run container
-docker run -p 8000:8000 -v $(pwd)/data:/app/data degiro-portfolio
+docker run -p 8000:8000 -v $(pwd)/data:/app/data degiro_portfolio
 ```
 
 ### Production Deployment Considerations
@@ -1006,8 +1006,8 @@ After=network.target
 [Service]
 Type=simple
 User=yourusername
-WorkingDirectory=/path/to/degiro-portfolio
-ExecStart=/path/to/degiro-portfolio start
+WorkingDirectory=/path/to/degiro_portfolio
+ExecStart=/path/to/degiro_portfolio start
 Restart=always
 
 [Install]
@@ -1044,7 +1044,7 @@ sudo certbot --nginx -d your-domain.com
 Create `.env` file:
 
 ```bash
-DATABASE_URL=sqlite:///path/to/degiro-portfolio.db
+DATABASE_URL=sqlite:///path/to/degiro_portfolio.db
 HOST=0.0.0.0
 PORT=8000
 PRICE_DATA_PROVIDER=yahoo
@@ -1057,14 +1057,14 @@ PRICE_DATA_PROVIDER=yahoo
 - Suitable for personal use
 - Single file database
 - No setup required
-- Backup: just copy `degiro-portfolio.db`
+- Backup: just copy `degiro_portfolio.db`
 
 ```bash
 # Backup
-cp degiro-portfolio.db degiro-portfolio-backup-$(date +%Y%m%d).db
+cp degiro_portfolio.db degiro_portfolio-backup-$(date +%Y%m%d).db
 
 # Automated daily backup (cron)
-0 2 * * * cp /path/to/degiro-portfolio.db /backups/degiro-$(date +\%Y\%m\%d).db
+0 2 * * * cp /path/to/degiro_portfolio.db /backups/degiro-$(date +\%Y\%m\%d).db
 ```
 
 #### PostgreSQL (Multi-user)
@@ -1159,37 +1159,37 @@ lsof -i :8000
 kill -9 <PID>
 
 # Or use the CLI
-./degiro-portfolio stop
+./degiro_portfolio stop
 ```
 
 #### Database Locked
 
 ```bash
 # Stop server
-./degiro-portfolio stop
+./degiro_portfolio stop
 
 # Check for stale connections
-fuser degiro-portfolio.db
+fuser degiro_portfolio.db
 
 # Restart
-./degiro-portfolio start
+./degiro_portfolio start
 ```
 
 #### Memory Issues
 
 ```bash
 # Check memory usage
-ps aux | grep degiro-portfolio
+ps aux | grep degiro_portfolio
 
 # Monitor in real-time
-top -p $(pgrep -f degiro-portfolio)
+top -p $(pgrep -f degiro_portfolio)
 ```
 
 ### Support
 
 For deployment issues:
 - Check [GitHub Issues](https://github.com/jdrumgoole/degiro_portfolio/issues)
-- Review application logs: `./degiro-portfolio logs`
+- Review application logs: `./degiro_portfolio logs`
 - Verify configuration in `.env`
 - Test in development environment first
 - Ensure all tests pass before deploying
@@ -1201,8 +1201,8 @@ For deployment issues:
 ### Project Links
 
 - **GitHub Repository**: https://github.com/jdrumgoole/degiro_portfolio
-- **PyPI Package**: https://pypi.org/project/degiro-portfolio/
-- **Documentation**: https://degiro-portfolio.readthedocs.io/
+- **PyPI Package**: https://pypi.org/project/degiro_portfolio/
+- **Documentation**: https://degiro_portfolio.readthedocs.io/
 
 ### Technology Documentation
 

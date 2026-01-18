@@ -16,7 +16,7 @@ The test suite is **completely isolated** from the production application:
 - **Dedicated Test Database**: `tests/.test_data/test_portfolio.db`
   - Created fresh for each test session
   - Automatically cleaned up after tests complete
-  - Never interferes with production `degiro-portfolio.db`
+  - Never interferes with production `degiro_portfolio.db`
 
 - **Dedicated Test Server**: `http://127.0.0.1:8001`
   - Runs on port **8001** (production uses **8000**)
@@ -47,7 +47,7 @@ tests/
 ### Run All Tests
 
 ```bash
-cd /Users/jdrumgoole/GIT/degiro-portfolio
+cd /Users/jdrumgoole/GIT/degiro_portfolio
 uv run pytest tests/ -v
 ```
 

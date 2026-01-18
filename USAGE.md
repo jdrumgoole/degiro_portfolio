@@ -4,20 +4,20 @@
 
 ### Using the CLI (Recommended)
 
-The `degiro-portfolio` CLI provides the simplest way to manage the server:
+The `degiro_portfolio` CLI provides the simplest way to manage the server:
 
 ```bash
 # Start the server
-./degiro-portfolio start
+./degiro_portfolio start
 
 # Check if server is running
-./degiro-portfolio status
+./degiro_portfolio status
 
 # Stop the server
-./degiro-portfolio stop
+./degiro_portfolio stop
 
 # Restart the server
-./degiro-portfolio restart
+./degiro_portfolio restart
 ```
 
 ### Using Invoke Tasks
@@ -129,8 +129,8 @@ uv run invoke clean
 ```
 
 This removes:
-- `.degiro-portfolio.pid` (and legacy `.stockchart.pid`)
-- `degiro-portfolio.log` (and legacy `stockchart.log`)
+- `.degiro_portfolio.pid` (and legacy `.stockchart.pid`)
+- `degiro_portfolio.log` (and legacy `stockchart.log`)
 - Python cache files (`__pycache__`, `*.pyc`)
 
 ### Reset Everything
@@ -154,7 +154,7 @@ uv sync
 uv run invoke setup
 
 # 3. Start the server
-./degiro-portfolio start
+./degiro_portfolio start
 
 # 4. Open http://localhost:8000 in your browser
 ```
@@ -180,39 +180,39 @@ uv run invoke import-data
 uv run invoke fetch-prices
 
 # 4. Restart the server to see updates
-./degiro-portfolio restart
+./degiro_portfolio restart
 ```
 
 ### Daily Use
 
 ```bash
 # Start server
-./degiro-portfolio start
+./degiro_portfolio start
 
 # Check status anytime
-./degiro-portfolio status
+./degiro_portfolio status
 
 # When done, stop server
-./degiro-portfolio stop
+./degiro_portfolio stop
 ```
 
 ### Troubleshooting
 
 ```bash
 # Check if server is running
-./degiro-portfolio status
+./degiro_portfolio status
 
 # View recent logs
 uv run invoke logs
 
 # If server won't start, clean and restart
 uv run invoke clean
-./degiro-portfolio start
+./degiro_portfolio start
 
 # If database seems corrupted
 uv run invoke reset
 uv run invoke setup
-./degiro-portfolio start
+./degiro_portfolio start
 ```
 
 ## Available Invoke Tasks
@@ -252,14 +252,14 @@ Available tasks:
 - **Default URL**: http://localhost:8000
 - **Host**: 0.0.0.0 (accessible from network)
 - **Port**: 8000
-- **PID File**: `.degiro-portfolio.pid`
-- **Log File**: `degiro-portfolio.log`
-- **Database**: `degiro-portfolio.db`
+- **PID File**: `.degiro_portfolio.pid`
+- **Log File**: `degiro_portfolio.log`
+- **Database**: `degiro_portfolio.db`
 
 ## Tips
 
 1. **Server must be running**: Make sure to start the server before accessing the web interface
-2. **Check status first**: Use `./degiro-portfolio status` to check if server is running
+2. **Check status first**: Use `./degiro_portfolio status` to check if server is running
 3. **View logs for errors**: If something isn't working, check `uv run invoke logs`
 4. **Update data regularly**: Use the "📈 Update Market Data" button in the web interface or run `invoke fetch-prices`
 5. **Use dev mode for development**: When making code changes, use `invoke dev` for auto-reload

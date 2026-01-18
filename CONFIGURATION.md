@@ -62,7 +62,7 @@ The following settings can be customized via environment variables:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DEGIRO_PORTFOLIO_DB` | `degiro-portfolio.db` | Database file path |
+| `DEGIRO_PORTFOLIO_DB` | `degiro_portfolio.db` | Database file path |
 | `DEGIRO_PORTFOLIO_HOST` | `0.0.0.0` | Server bind address |
 | `DEGIRO_PORTFOLIO_PORT` | `8000` | Server port |
 | `INITIAL_FETCH_PERIOD` | `max` | How far back to fetch stock prices |
