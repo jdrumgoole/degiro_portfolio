@@ -33,8 +33,11 @@ Usage:
         invoke test-integration  - Run integration tests (browser tests)
 
     Development:
-        invoke clean         - Clean generated files (includes database)
         invoke dev           - Start development server with auto-reload
+
+    Cleanup:
+        invoke prodclean     - Clean production files (includes production database)
+        invoke testclean     - Clean test database and test server files
 """
 from invoke import task
 import sys
@@ -172,9 +175,9 @@ def purge_data(c):
 
 
 @task
-def clean(c):
-    """Clean generated files."""
-    print("🧹 Cleaning generated files...")
+def prodclean(c):
+    """Clean production files (includes production database)."""
+    print("🧹 Cleaning production files...")
 
     files_to_remove = [
         ".degiro-portfolio.pid",
@@ -196,7 +199,27 @@ def clean(c):
     c.run("find . -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true")
     c.run("find . -name '*.pyc' -delete 2>/dev/null || true")
 
-    print("✅ Cleanup complete")
+    print("✅ Production cleanup complete")
+
+
+@task
+def testclean(c):
+    """Clean test database and test server files."""
+    print("🧹 Cleaning test files...")
+
+    files_to_remove = [
+        "degiro-portfolio-test.db",
+        ".degiro-portfolio-test.pid",
+        "degiro-portfolio-test.log",
+    ]
+
+    for file in files_to_remove:
+        file_path = PROJECT_ROOT / file
+        if file_path.exists():
+            file_path.unlink()
+            print(f"   Removed: {file}")
+
+    print("✅ Test cleanup complete")
 
 
 @task
@@ -250,10 +273,10 @@ def format_code(c):
     c.run("uv run ruff format src/", pty=True)
 
 
-@task(pre=[stop, clean])
+@task(pre=[stop, prodclean])
 def reset(c):
-    """Reset everything (stop server, clean all data)."""
-    print("\n⚠️  All data has been cleaned. Run 'invoke setup' to reinitialize.")
+    """Reset production environment (stop server, clean all production data)."""
+    print("\n⚠️  All production data has been cleaned. Run 'invoke setup' to reinitialize.")
 
 
 @task

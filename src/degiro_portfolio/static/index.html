@@ -654,14 +654,68 @@
         .summary-value.negative {
             color: #fc8181;
         }
+
+        /* Server offline styles */
+        .server-offline-banner {
+            background: linear-gradient(135deg, #f56565 0%, #c53030 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+            box-shadow: 0 4px 12px rgba(245, 101, 101, 0.3);
+        }
+
+        .server-offline-banner h2 {
+            margin: 0 0 10px 0;
+            font-size: 1.4em;
+        }
+
+        .server-offline-banner p {
+            margin: 0;
+            opacity: 0.9;
+        }
+
+        .server-offline-banner code {
+            background: rgba(255, 255, 255, 0.2);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        /* Disabled button styles */
+        .upload-btn:disabled,
+        .purge-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        .upload-btn:disabled:hover,
+        .purge-btn:disabled:hover {
+            transform: none !important;
+            box-shadow: none !important;
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Server Offline Banner (hidden by default) -->
+        <div id="server-offline-banner" class="server-offline-banner" style="display: none;">
+            <h2>⚠️ Server Not Running</h2>
+            <p>The DEGIRO Portfolio server is not responding. Please start the server:</p>
+            <p style="margin-top: 10px;"><code>./degiro-portfolio start</code> or <code>degiro-portfolio start</code></p>
+        </div>
+
         <header>
             <div class="header-content">
                 <h1>📊 DEGIRO Portfolio</h1>
                 <p class="subtitle">Track and visualize your DEGIRO portfolio performance</p>
+                <p id="server-status" class="subtitle" style="margin-top: 8px; font-size: 0.85em;">
+                    <span id="server-url"></span>
+                    <span id="server-status-indicator"></span>
+                </p>
             </div>
             <div style="display: flex; gap: 12px; flex-direction: column; align-items: flex-end;">
                 <div style="display: flex; gap: 12px;">
@@ -733,6 +787,74 @@
         let holdings = [];
         let selectedStockId = null;
         let chartRefreshInterval = null;
+        let serverOnline = null;  // null = unknown, true = online, false = offline
+
+        // Server connectivity check
+        let serverCheckInterval = null;
+
+        async function checkServerStatus() {
+            const serverUrl = window.location.origin;
+            const urlDisplay = document.getElementById('server-url');
+            const statusIndicator = document.getElementById('server-status-indicator');
+            const offlineBanner = document.getElementById('server-offline-banner');
+
+            urlDisplay.textContent = serverUrl + ' ';
+
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+                const response = await fetch('/api/market-data-status', { signal: controller.signal });
+                clearTimeout(timeoutId);
+
+                if (response.ok) {
+                    // Check if server was previously offline (not initial load)
+                    const wasOffline = serverOnline === false;
+                    serverOnline = true;
+                    statusIndicator.innerHTML = '<span style="color: #48bb78;">● Online</span>';
+                    offlineBanner.style.display = 'none';
+                    setButtonsEnabled(true);
+
+                    // If server came back online after being offline, reload the page
+                    if (wasOffline) {
+                        window.location.reload();
+                    }
+                    return true;
+                } else {
+                    throw new Error('Server returned error');
+                }
+            } catch (error) {
+                serverOnline = false;
+                statusIndicator.innerHTML = '<span style="color: #fc8181;">● Offline</span>';
+                offlineBanner.style.display = 'block';
+                setButtonsEnabled(false);
+                document.getElementById('loading').style.display = 'none';
+
+                // Hide other UI elements when offline
+                document.getElementById('holdings-container').style.display = 'none';
+                document.getElementById('portfolio-summary').style.display = 'none';
+                document.getElementById('portfolio-chart-section').style.display = 'none';
+                document.getElementById('chart-section').style.display = 'none';
+
+                return false;
+            }
+        }
+
+        function setButtonsEnabled(enabled) {
+            const buttons = document.querySelectorAll('.upload-btn, .purge-btn');
+            buttons.forEach(btn => {
+                btn.disabled = !enabled;
+            });
+        }
+
+        // Start continuous server monitoring
+        function startServerMonitoring() {
+            // Check every 5 seconds
+            if (serverCheckInterval) {
+                clearInterval(serverCheckInterval);
+            }
+            serverCheckInterval = setInterval(checkServerStatus, 5000);
+        }
 
         // Currency utility functions
         function getCurrencySymbol(currency) {
@@ -873,8 +995,8 @@
 
             } catch (error) {
                 console.error('Failed to load portfolio summary:', error);
-                // Still show the portfolio summary div even if there's an error
-                document.getElementById('portfolio-summary').style.display = 'block';
+                // Check if server went offline
+                await checkServerStatus();
             }
         }
 
@@ -982,6 +1104,8 @@
 
             } catch (error) {
                 console.error('Failed to load portfolio valuation chart:', error);
+                // Check if server went offline
+                await checkServerStatus();
             }
         }
 
@@ -1016,6 +1140,11 @@
                     loadStockChart(holdings[0].id);
                 }
             } catch (error) {
+                // Check if server went offline
+                const isOnline = await checkServerStatus();
+                if (!isOnline) {
+                    return; // Server offline banner will be shown
+                }
                 showError('Failed to load holdings: ' + error.message);
             }
         }
@@ -1185,6 +1314,11 @@
                 }, 60000); // 60000ms = 1 minute
 
             } catch (error) {
+                // Check if server went offline
+                const isOnline = await checkServerStatus();
+                if (!isOnline) {
+                    return; // Server offline banner will be shown
+                }
                 showError('Failed to load chart data: ' + error.message);
             }
         }
@@ -1854,6 +1988,11 @@
             } catch (error) {
                 clearInterval(progressInterval);
                 hideUploadProgress();
+                // Check if server went offline
+                const isOnline = await checkServerStatus();
+                if (!isOnline) {
+                    return;
+                }
                 showUploadStatus('Error uploading file: ' + error.message, false);
             }
 
@@ -1882,6 +2021,8 @@
                 }
             } catch (error) {
                 console.error('Failed to load market data status:', error);
+                // Check if server went offline
+                await checkServerStatus();
             }
         }
 
@@ -1906,6 +2047,11 @@
                     showUploadStatus('❌ ' + result.message, false);
                 }
             } catch (error) {
+                // Check if server went offline
+                const isOnline = await checkServerStatus();
+                if (!isOnline) {
+                    return;
+                }
                 showUploadStatus('Error updating market data: ' + error.message, false);
             }
         }
@@ -1998,6 +2144,11 @@
                             showUploadStatus('❌ ' + result.message, false);
                         }
                     } catch (error) {
+                        // Check if server went offline
+                        const isOnline = await checkServerStatus();
+                        if (!isOnline) {
+                            return;
+                        }
                         showUploadStatus('Error purging database: ' + error.message, false);
                     }
                 }
@@ -2062,6 +2213,8 @@
                 }
             } catch (error) {
                 console.error('Failed to refresh live prices:', error);
+                // Check if server went offline
+                await checkServerStatus();
             }
         }
 
@@ -2083,13 +2236,29 @@
         }
 
         // Initialize
-        loadHoldings().then(() => {
-            // Load portfolio valuation chart (NEW)
+        async function initialize() {
+            // Start continuous server monitoring (every 5 seconds)
+            startServerMonitoring();
+
+            // Check server status first
+            const isOnline = await checkServerStatus();
+
+            if (!isOnline) {
+                // Server is offline, monitoring will detect when it comes back
+                return;
+            }
+
+            // Server is online, proceed with loading
+            await loadHoldings();
+
+            // Load portfolio valuation chart
             loadPortfolioValuationChart();
 
             // Start live price updates after holdings are loaded
             startLivePriceUpdates();
-        });
+        }
+
+        initialize();
     </script>
 
     <!-- Purge Confirmation Modal -->

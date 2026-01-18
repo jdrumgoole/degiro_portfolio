@@ -4,9 +4,18 @@ This guide will help you install and use DEGIRO Portfolio Tracker in just a few 
 
 ## Installation
 
-### Option 1: Simple Installation (Recommended for Most Users)
+### Step 1: Install Python
 
-If you have Python installed on your computer, open Terminal (Mac/Linux) or Command Prompt (Windows) and run:
+You need Python 3.11 or newer. [Download Python here](https://www.python.org/downloads/) if you don't have it.
+
+To check if you have Python installed, open Terminal (Mac/Linux) or Command Prompt (Windows) and type:
+```bash
+python --version
+```
+
+### Step 2: Install the Application
+
+Open Terminal (Mac/Linux) or Command Prompt (Windows) and run:
 
 ```bash
 pip install degiro-portfolio
@@ -14,15 +23,7 @@ pip install degiro-portfolio
 
 This downloads and installs the application automatically.
 
-**Don't have Python?** Download it from [python.org](https://www.python.org/downloads/) - you need Python 3.11 or newer.
-
-### Option 2: Installing from Source
-
-If you downloaded the source code from GitHub:
-
-1. Open Terminal/Command Prompt
-2. Navigate to the folder where you downloaded the code
-3. Run: `uv sync` (requires uv package manager: `pip install uv`)
+**Note for Developers**: If you want to install from source code, see the [Developer Appendix](developer-appendix.md).
 
 ## Quick Start
 
@@ -198,8 +199,7 @@ degiro-portfolio status    # Check if server is running
 
 - **[Features](features.md)** - Explore all available features
 - **[Data Providers](data-providers.md)** - Learn about price data sources
-- **[API Reference](api-reference.md)** - API endpoint documentation
-- **[Development](development.md)** - Contributing guidelines
+- **[Advanced Setup](advanced-setup.md)** - Advanced configuration options
 
 ## Troubleshooting
 

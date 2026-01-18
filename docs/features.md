@@ -346,17 +346,15 @@ The charts are designed to answer specific questions about your investments:
 - You uploaded the wrong file and want to clean up
 - You're testing the application with demo data
 
-### Viewing Information
+### Viewing Server Logs
 
-**Command-line tools** (optional, for advanced users):
+If you need to troubleshoot issues, you can view the server logs:
 
 ```bash
-# See how many stocks and transactions you have
-uv run invoke db-info
-
-# View what the server is doing (useful for troubleshooting)
-uv run invoke logs
+degiro-portfolio logs
 ```
+
+This shows recent activity and any error messages.
 
 ## Multi-Currency Support
 
