@@ -1,5 +1,5 @@
 [project]
-name = "degiro-portfolio"
+name = "degiro_portfolio"
 version = "0.3.6"
 description = "DEGIRO portfolio tracking and visualization application"
 readme = "README.md"
