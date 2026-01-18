@@ -726,7 +726,7 @@
                     <button class="upload-btn" onclick="document.getElementById('file-input').click()">
                         📤 Upload Transactions
                     </button>
-                    <button class="purge-btn" onclick="purgeDatabase()">
+                    <button id="purge-btn" class="purge-btn" onclick="purgeDatabase()">
                         🗑️ Purge All Data
                     </button>
                 </div>
@@ -788,6 +788,8 @@
         let selectedStockId = null;
         let chartRefreshInterval = null;
         let serverOnline = null;  // null = unknown, true = online, false = offline
+        let failureCount = 0;     // Track consecutive failures
+        const FAILURE_THRESHOLD = 3;  // Require 3 consecutive failures before marking offline
 
         // Server connectivity check
         let serverCheckInterval = null;
@@ -802,12 +804,15 @@
 
             try {
                 const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 3000);
+                const timeoutId = setTimeout(() => controller.abort(), 10000);  // 10 second timeout
 
                 const response = await fetch('/api/market-data-status', { signal: controller.signal });
                 clearTimeout(timeoutId);
 
                 if (response.ok) {
+                    // Reset failure count on success
+                    failureCount = 0;
+
                     // Check if server was previously offline (not initial load)
                     const wasOffline = serverOnline === false;
                     serverOnline = true;
@@ -824,17 +829,23 @@
                     throw new Error('Server returned error');
                 }
             } catch (error) {
-                serverOnline = false;
-                statusIndicator.innerHTML = '<span style="color: #fc8181;">● Offline</span>';
-                offlineBanner.style.display = 'block';
-                setButtonsEnabled(false);
-                document.getElementById('loading').style.display = 'none';
+                // Increment failure count
+                failureCount++;
 
-                // Hide other UI elements when offline
-                document.getElementById('holdings-container').style.display = 'none';
-                document.getElementById('portfolio-summary').style.display = 'none';
-                document.getElementById('portfolio-chart-section').style.display = 'none';
-                document.getElementById('chart-section').style.display = 'none';
+                // Only mark as offline after multiple consecutive failures
+                if (failureCount >= FAILURE_THRESHOLD) {
+                    serverOnline = false;
+                    statusIndicator.innerHTML = '<span style="color: #fc8181;">● Offline</span>';
+                    offlineBanner.style.display = 'block';
+                    setButtonsEnabled(false);
+                    document.getElementById('loading').style.display = 'none';
+
+                    // Hide other UI elements when offline
+                    document.getElementById('holdings-container').style.display = 'none';
+                    document.getElementById('portfolio-summary').style.display = 'none';
+                    document.getElementById('portfolio-chart-section').style.display = 'none';
+                    document.getElementById('chart-section').style.display = 'none';
+                }
 
                 return false;
             }
@@ -845,6 +856,14 @@
             buttons.forEach(btn => {
                 btn.disabled = !enabled;
             });
+        }
+
+        function updatePurgeButtonState() {
+            const purgeBtn = document.getElementById('purge-btn');
+            if (purgeBtn) {
+                // Disable purge button if there's no data
+                purgeBtn.disabled = holdings.length === 0;
+            }
         }
 
         // Start continuous server monitoring
@@ -1118,6 +1137,9 @@
                 const response = await fetch('/api/holdings');
                 const data = await response.json();
                 holdings = data.holdings;
+
+                // Update purge button state based on whether there's data
+                updatePurgeButtonState();
 
                 if (holdings.length === 0) {
                     document.getElementById('loading').innerHTML =
@@ -2128,6 +2150,10 @@
                         const result = await response.json();
 
                         if (result.success) {
+                            // Clear holdings and disable purge button
+                            holdings = [];
+                            updatePurgeButtonState();
+
                             showUploadStatus(
                                 `✅ Database purged successfully!\n` +
                                 `Deleted: ${result.deleted.stocks} stocks, ` +
