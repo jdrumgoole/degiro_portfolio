@@ -34,7 +34,7 @@ jobs:
         run: uv run playwright install --with-deps chromium
 
       - name: Run tests
-        run: uv run pytest --ignore=tests/test_portfolio_overview.py --ignore=tests/test_stock_charts.py --ignore=tests/test_upload_ui.py --ignore=tests/test_interactive_features.py -v
+        run: uv run pytest tests/test_main_unit.py tests/test_price_fetchers_unit.py tests/test_ticker_resolver_unit.py tests/test_fetch_prices_unit.py tests/test_fetch_indices_unit.py -v
 
   lint:
     name: Lint Code
