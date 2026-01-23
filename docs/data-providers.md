@@ -25,12 +25,12 @@ Yahoo Finance is the default provider and works out of the box with no configura
 - Free to use
 - No API key required
 - Good coverage for US and European stocks
-- No rate limits
 
 **Cons:**
 - End-of-day data only
 - Occasional reliability issues
 - No official API support
+- Has undocumented rate limits (the app handles this automatically)
 
 **Configuration:**
 ```bash
@@ -113,7 +113,7 @@ TWELVEDATA_API_KEY=your_api_key_here
 | **API Key** | No | Yes | Yes |
 | **US Stocks** | ✅ Excellent | ✅ Excellent | ✅ Excellent |
 | **EU Stocks** | ✅ Good | ✅ Excellent | ⚠️ Limited (free) |
-| **Rate Limits** | None | Generous | 800/day (free) |
+| **Rate Limits** | ~20/min (auto-handled) | Generous | 800/day (free) |
 | **Reliability** | ⚠️ Variable | ✅ Excellent | ✅ Good |
 | **Historical Data** | ✅ Many years | ✅ Extensive | ✅ Good |
 | **Support** | None | ✅ Official | ✅ Official |
@@ -214,7 +214,13 @@ Make sure your `.env` file exists and contains the correct API key for your chos
 ### Rate limit errors (Twelve Data)
 - Free tier is limited to 800 calls/day
 - Wait 24 hours or upgrade to paid plan
-- Switch to Yahoo Finance (no limits)
+- Switch to Yahoo Finance as alternative
+
+### Rate limit errors (Yahoo Finance)
+- Yahoo has undocumented rate limits (~2000 requests/hour)
+- The app automatically throttles requests (~20/minute) to avoid rate limits
+- If you see rate limit errors, wait 60 seconds and try again
+- Exchange rates are cached daily to reduce API calls
 
 ### 402 Payment Required (FMP)
 - Free tier has very limited access

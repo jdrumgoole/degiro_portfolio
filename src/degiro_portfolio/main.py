@@ -13,10 +13,11 @@ import pandas as pd
 import tempfile
 import yfinance as yf
 
-from .database import get_db, Stock, Transaction, StockPrice, Index, IndexPrice, init_db
+from .database import get_db, Stock, Transaction, StockPrice, Index, IndexPrice, ExchangeRate, init_db
 from .config import Config, get_column
 from .fetch_prices import fetch_stock_prices
-from .price_fetchers import get_price_fetcher
+from .price_fetchers import get_price_fetcher, yahoo_rate_limiter
+from .ticker_resolver import resolve_ticker_from_isin
 
 # Market indices to track
 INDICES = {
@@ -50,6 +51,9 @@ def ensure_indices_exist(db: Session) -> tuple[int, int]:
             # Check if we have price data
             existing_prices = db.query(IndexPrice).filter_by(index_id=index.id).count()
             if existing_prices == 0:
+                # Apply rate limiting before Yahoo call
+                yahoo_rate_limiter.wait_if_needed()
+
                 # Fetch historical data (5 years)
                 ticker = yf.Ticker(symbol)
                 hist = ticker.history(period="5y")
@@ -75,7 +79,7 @@ def ensure_indices_exist(db: Session) -> tuple[int, int]:
     return indices_created, prices_fetched
 
 
-app = FastAPI(title="DEGIRO Portfolio", version="0.3.7")
+app = FastAPI(title="DEGIRO Portfolio", version="0.3.8")
 
 # Track server start time
 SERVER_START_TIME = datetime.now()
@@ -292,38 +296,86 @@ async def get_market_data_status(db: Session = Depends(get_db)):
 
 
 @app.get("/api/exchange-rates")
-async def get_exchange_rates():
-    """Get current exchange rates for currency conversion."""
-    try:
-        # Fetch current exchange rates from Yahoo Finance
-        usd_eur_ticker = yf.Ticker('USDEUR=X')
-        sek_eur_ticker = yf.Ticker('SEKEUR=X')
-        gbp_eur_ticker = yf.Ticker('GBPEUR=X')
+async def get_exchange_rates(db: Session = Depends(get_db)):
+    """Get current exchange rates for currency conversion.
 
-        usd_eur = usd_eur_ticker.history(period='1d')['Close'].iloc[-1]
-        sek_eur = sek_eur_ticker.history(period='1d')['Close'].iloc[-1]
-        gbp_eur = gbp_eur_ticker.history(period='1d')['Close'].iloc[-1]
+    Uses cached rates from the database if available for today.
+    Only fetches from Yahoo Finance if rates are missing or stale.
+    """
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    currencies = ["USD", "GBP", "SEK"]
+    rates = {"EUR": 1.0}
+    need_fetch = []
 
-        return {
-            "success": True,
-            "rates": {
-                "EUR": 1.0,
-                "USD": float(usd_eur),
-                "SEK": float(sek_eur),
-                "GBP": float(gbp_eur)
-            }
+    # Check database for today's cached rates
+    for currency in currencies:
+        cached_rate = db.query(ExchangeRate).filter(
+            ExchangeRate.from_currency == currency,
+            ExchangeRate.to_currency == "EUR",
+            ExchangeRate.date >= today
+        ).first()
+
+        if cached_rate:
+            rates[currency] = cached_rate.rate
+        else:
+            need_fetch.append(currency)
+
+    # Fetch missing rates from Yahoo Finance
+    if need_fetch:
+        yahoo_symbols = {
+            "USD": "USDEUR=X",
+            "GBP": "GBPEUR=X",
+            "SEK": "SEKEUR=X"
         }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "rates": {
-                "EUR": 1.0,
-                "USD": 0.85,  # Fallback approximations
-                "SEK": 0.093,
-                "GBP": 1.18
-            }
-        }
+
+        for currency in need_fetch:
+            try:
+                # Apply rate limiting before Yahoo call
+                yahoo_rate_limiter.wait_if_needed()
+
+                ticker = yf.Ticker(yahoo_symbols[currency])
+                hist = ticker.history(period='5d')  # Get 5 days in case of weekends/holidays
+                if not hist.empty:
+                    rate = float(hist['Close'].iloc[-1])
+                    rates[currency] = rate
+
+                    # Store in database for caching
+                    exchange_rate = ExchangeRate(
+                        date=today,
+                        from_currency=currency,
+                        to_currency="EUR",
+                        rate=rate
+                    )
+                    db.add(exchange_rate)
+                else:
+                    # Use fallback if Yahoo returns no data
+                    rates[currency] = _get_fallback_rate(currency)
+            except Exception as e:
+                error_msg = str(e).lower()
+                if 'rate' in error_msg or 'too many' in error_msg:
+                    yahoo_rate_limiter.report_rate_limit()
+                rates[currency] = _get_fallback_rate(currency)
+
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+
+    return {
+        "success": True,
+        "rates": rates,
+        "cached": len(need_fetch) == 0
+    }
+
+
+def _get_fallback_rate(currency: str) -> float:
+    """Get fallback exchange rate for a currency."""
+    fallbacks = {
+        "USD": 0.85,
+        "SEK": 0.093,
+        "GBP": 1.18
+    }
+    return fallbacks.get(currency, 1.0)
 
 
 @app.get("/api/stock/{stock_id}/prices")
@@ -958,6 +1010,9 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
             indices = db.query(Index).all()
             for index in indices:
                 try:
+                    # Apply rate limiting before Yahoo call
+                    yahoo_rate_limiter.wait_if_needed()
+
                     ticker = yf.Ticker(index.symbol)
                     hist = ticker.history(period="7d")
 
@@ -1070,6 +1125,9 @@ async def refresh_live_prices(db: Session = Depends(get_db)):
             # Fallback to Yahoo Finance if Twelve Data not configured or failed
             if not quote_data:
                 try:
+                    # Apply rate limiting before Yahoo call
+                    yahoo_rate_limiter.wait_if_needed()
+
                     ticker_obj = yf.Ticker(ticker_symbol)
                     hist = ticker_obj.history(period='1d')
 
@@ -1099,6 +1157,9 @@ async def refresh_live_prices(db: Session = Depends(get_db)):
                         "timestamp": hist.index[-1].strftime('%Y-%m-%d %H:%M:%S'),
                     }
                 except Exception as e:
+                    error_msg = str(e).lower()
+                    if 'rate' in error_msg or 'too many' in error_msg:
+                        yahoo_rate_limiter.report_rate_limit()
                     errors.append(f"Error fetching {stock.name}: {str(e)}")
                     continue
 
@@ -1164,12 +1225,19 @@ async def update_market_data(db: Session = Depends(get_db)):
 
         for stock in current_holdings:
             try:
-                # Get ticker symbol from database
+                # Get ticker symbol from database, or resolve if missing
                 ticker_symbol = stock.yahoo_ticker
 
                 if not ticker_symbol:
-                    errors.append(f"No ticker resolved for {stock.name} (ISIN: {stock.isin})")
-                    continue
+                    # Try to auto-resolve the ticker
+                    ticker_symbol = resolve_ticker_from_isin(stock.isin, stock.currency)
+                    if ticker_symbol:
+                        # Save resolved ticker to database
+                        stock.yahoo_ticker = ticker_symbol
+                        db.commit()
+                    else:
+                        errors.append(f"No ticker resolved for {stock.name} (ISIN: {stock.isin})")
+                        continue
 
                 # Get latest price data (last 7 days to ensure we have recent data)
                 end_date = datetime.now()
@@ -1225,6 +1293,9 @@ async def update_market_data(db: Session = Depends(get_db)):
         indices = db.query(Index).all()
         for index in indices:
             try:
+                # Apply rate limiting before Yahoo call
+                yahoo_rate_limiter.wait_if_needed()
+
                 ticker = yf.Ticker(index.symbol)
                 hist = ticker.history(period="7d")
 
@@ -1254,6 +1325,9 @@ async def update_market_data(db: Session = Depends(get_db)):
                     updated_indices += 1
 
             except Exception as e:
+                error_msg = str(e).lower()
+                if 'rate' in error_msg or 'too many' in error_msg:
+                    yahoo_rate_limiter.report_rate_limit()
                 errors.append(f"Error updating {index.name}: {str(e)}")
 
         db.commit()

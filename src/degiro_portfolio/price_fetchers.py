@@ -4,11 +4,73 @@ Price data fetchers for different providers (Yahoo Finance, Twelve Data, etc.).
 from datetime import datetime, timedelta
 from typing import Optional, List, Tuple
 import pandas as pd
+import time
+import threading
 
 try:
     from .config import Config
 except ImportError:
     from degiro_portfolio.config import Config
+
+
+class YahooRateLimiter:
+    """
+    Rate limiter for Yahoo Finance API calls.
+
+    Yahoo Finance has undocumented rate limits. This limiter:
+    - Limits to ~20 requests per minute (conservative)
+    - Adds delay between requests
+    - Has cooldown after detecting rate limit errors
+    """
+
+    _instance = None
+    _lock = threading.Lock()
+
+    def __new__(cls):
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialize()
+        return cls._instance
+
+    def _initialize(self):
+        self.requests_per_minute = 20  # Conservative limit
+        self.min_interval = 60.0 / self.requests_per_minute  # ~3 seconds between requests
+        self.last_request_time = 0.0
+        self.cooldown_until = 0.0
+        self.request_lock = threading.Lock()
+
+    def wait_if_needed(self):
+        """Wait if necessary to respect rate limits."""
+        with self.request_lock:
+            now = time.time()
+
+            # Check if we're in cooldown period
+            if now < self.cooldown_until:
+                wait_time = self.cooldown_until - now
+                print(f"  ⏳ Yahoo rate limit cooldown: waiting {wait_time:.1f}s")
+                time.sleep(wait_time)
+                now = time.time()
+
+            # Ensure minimum interval between requests
+            elapsed = now - self.last_request_time
+            if elapsed < self.min_interval:
+                wait_time = self.min_interval - elapsed
+                time.sleep(wait_time)
+
+            self.last_request_time = time.time()
+
+    def report_rate_limit(self):
+        """Called when a rate limit error is detected."""
+        with self.request_lock:
+            # Set cooldown for 60 seconds
+            self.cooldown_until = time.time() + 60.0
+            print("  ⚠️  Yahoo rate limit hit - cooling down for 60 seconds")
+
+
+# Global rate limiter instance
+yahoo_rate_limiter = YahooRateLimiter()
 
 
 class PriceFetcher:
@@ -24,30 +86,39 @@ class PriceFetcher:
 
 
 class YahooFinanceFetcher(PriceFetcher):
-    """Fetch prices from Yahoo Finance using yfinance."""
+    """Fetch prices from Yahoo Finance using yfinance with rate limiting."""
 
     def __init__(self):
         import yfinance as yf
         self.yf = yf
 
     def fetch_prices(self, ticker: str, start_date: datetime, end_date: datetime) -> pd.DataFrame:
-        """Fetch from Yahoo Finance."""
-        ticker_obj = self.yf.Ticker(ticker)
-        hist = ticker_obj.history(start=start_date, end=end_date)
+        """Fetch from Yahoo Finance with rate limiting."""
+        # Wait for rate limiter
+        yahoo_rate_limiter.wait_if_needed()
 
-        if hist.empty:
-            return pd.DataFrame()
+        try:
+            ticker_obj = self.yf.Ticker(ticker)
+            hist = ticker_obj.history(start=start_date, end=end_date)
 
-        # Rename columns to match our standard format
-        hist = hist.rename(columns={
-            'Open': 'open',
-            'High': 'high',
-            'Low': 'low',
-            'Close': 'close',
-            'Volume': 'volume'
-        })
+            if hist.empty:
+                return pd.DataFrame()
 
-        return hist[['open', 'high', 'low', 'close', 'volume']]
+            # Rename columns to match our standard format
+            hist = hist.rename(columns={
+                'Open': 'open',
+                'High': 'high',
+                'Low': 'low',
+                'Close': 'close',
+                'Volume': 'volume'
+            })
+
+            return hist[['open', 'high', 'low', 'close', 'volume']]
+        except Exception as e:
+            error_msg = str(e).lower()
+            if 'rate' in error_msg or 'too many' in error_msg:
+                yahoo_rate_limiter.report_rate_limit()
+            raise
 
 
 class FMPFetcher(PriceFetcher):

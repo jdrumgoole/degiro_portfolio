@@ -106,6 +106,17 @@ class IndexPrice(Base):
     index = relationship("Index", back_populates="prices")
 
 
+class ExchangeRate(Base):
+    """Historical exchange rate data for currency conversion."""
+    __tablename__ = "exchange_rates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(DateTime, index=True)
+    from_currency = Column(String, index=True)  # e.g., USD, GBP, SEK
+    to_currency = Column(String, default="EUR")  # Target currency (always EUR for this app)
+    rate = Column(Float)  # Conversion rate (e.g., 1 USD = 0.85 EUR)
+
+
 def init_db():
     """Initialize the database, creating all tables."""
     Base.metadata.create_all(bind=engine)

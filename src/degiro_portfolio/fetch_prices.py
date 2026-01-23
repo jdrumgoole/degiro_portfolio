@@ -19,7 +19,8 @@ from sqlalchemy import func
 # Stocks that should always use Yahoo Finance instead of other providers
 # (due to incorrect data from other providers)
 YAHOO_FINANCE_OVERRIDE = [
-    'AIR.PA',  # Airbus - Twelve Data returns incorrect price (~€101 instead of ~€214)
+    'AIR.PA',   # Airbus - Twelve Data returns incorrect price
+    'ASML.AS',  # ASML - Twelve Data normalizes to US ticker with different prices
 ]
 
 def get_ticker_for_stock(stock):
