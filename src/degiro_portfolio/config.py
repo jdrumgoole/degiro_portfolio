@@ -119,6 +119,37 @@ class Config:
         'exchange_rate': 'Exchange rate',
     }
 
+    # Dutch DEGIRO export format
+    DEGIRO_COLUMNS_NL = {
+        # Transaction identification
+        'date': 'Datum',
+        'time': 'Tijd',
+        'transaction_id': 'Unnamed: 17',
+
+        # Stock information
+        'product': 'Product',
+        'isin': 'ISIN',
+        'exchange': 'Referentiebeurs',
+
+        # Transaction details
+        'quantity': 'Aantal',
+        'price': 'Koers',
+        'currency': 'Unnamed: 8',
+        'venue': 'Handelsplaats',
+
+        # Financial values (in EUR)
+        'value_eur': 'Waarde',
+        'total_eur': 'Totaal',
+        'fees_eur': 'Transactie- en/of derde kosten',
+        'exchange_rate': 'Wisselkoers',
+    }
+
+    # All known column mappings for auto-detection
+    KNOWN_COLUMN_MAPPINGS = {
+        'en': DEGIRO_COLUMNS,
+        'nl': DEGIRO_COLUMNS_NL,
+    }
+
     # Example: Alternative broker format (uncomment and modify as needed)
     # INTERACTIVE_BROKERS_COLUMNS = {
     #     'date': 'Date',
@@ -194,9 +225,55 @@ class Config:
         return [cls.get_column(key) for key in cls.REQUIRED_COLUMNS]
 
     @classmethod
+    def _normalize_columns(cls, columns: list) -> dict:
+        """
+        Build a mapping from stripped column names to original column names.
+
+        This handles DEGIRO exports where some columns have trailing spaces
+        (e.g., 'Price ' vs 'Price').
+
+        Returns:
+            Dict mapping stripped name -> original name
+        """
+        return {col.strip(): col for col in columns}
+
+    @classmethod
+    def detect_and_set_column_mapping(cls, df_columns: list) -> str | None:
+        """
+        Auto-detect the export language from DataFrame columns and set the
+        active column mapping accordingly.
+
+        Args:
+            df_columns: List of column names from the DataFrame
+
+        Returns:
+            Language code ('en', 'nl', etc.) if detected, None otherwise
+        """
+        normalized = {col.strip() for col in df_columns}
+
+        best_lang = None
+        best_score = 0
+
+        for lang, mapping in cls.KNOWN_COLUMN_MAPPINGS.items():
+            expected = {v.strip() for v in mapping.values()}
+            score = len(expected & normalized)
+            if score > best_score:
+                best_score = score
+                best_lang = lang
+
+        if best_lang:
+            cls.ACTIVE_COLUMN_MAPPING = cls.KNOWN_COLUMN_MAPPINGS[best_lang]
+            return best_lang
+        return None
+
+    @classmethod
     def validate_excel_columns(cls, df_columns: list) -> tuple[bool, list]:
         """
         Validate that a DataFrame has all required columns.
+
+        Handles trailing/leading whitespace in column names (e.g., DEGIRO's
+        'Price ' column). Also auto-detects the export language if the
+        default mapping doesn't match.
 
         Args:
             df_columns: List of column names from the DataFrame
@@ -209,10 +286,49 @@ class Config:
             >>> if not valid:
             ...     print(f"Missing columns: {missing}")
         """
-        required = set(cls.get_required_excel_columns())
-        present = set(df_columns)
-        missing = list(required - present)
+        # First try auto-detecting the language
+        cls.detect_and_set_column_mapping(df_columns)
+
+        # Build normalized lookup: stripped name -> original name
+        normalized = cls._normalize_columns(df_columns)
+        present_stripped = set(normalized.keys())
+
+        # Check required columns, matching with stripped names
+        missing = []
+        for key in cls.REQUIRED_COLUMNS:
+            expected_col = cls.get_column(key)
+            if expected_col not in df_columns and expected_col.strip() not in present_stripped:
+                missing.append(expected_col)
+
         return (len(missing) == 0, missing)
+
+    @classmethod
+    def normalize_dataframe_columns(cls, df):
+        """
+        Rename DataFrame columns to match the active column mapping.
+
+        Handles trailing/leading whitespace mismatches (e.g., 'Price ' vs
+        'Price') by stripping whitespace and matching against expected names.
+
+        Args:
+            df: pandas DataFrame to normalize
+
+        Returns:
+            DataFrame with normalized column names
+        """
+        expected_cols = set(cls.ACTIVE_COLUMN_MAPPING.values())
+        rename_map = {}
+        for col in df.columns:
+            stripped = col.strip()
+            if col not in expected_cols and stripped != col:
+                # Check if the stripped version matches an expected column
+                for expected in expected_cols:
+                    if stripped == expected.strip() and expected != col:
+                        rename_map[col] = expected
+                        break
+        if rename_map:
+            df = df.rename(columns=rename_map)
+        return df
 
     @classmethod
     def get_column_mapping_name(cls) -> str:
@@ -224,6 +340,8 @@ class Config:
         """
         if cls.ACTIVE_COLUMN_MAPPING == cls.DEGIRO_COLUMNS:
             return 'DEGIRO'
+        if cls.ACTIVE_COLUMN_MAPPING == cls.DEGIRO_COLUMNS_NL:
+            return 'DEGIRO (NL)'
         # Add more mappings here as they're created
         return 'CUSTOM'
 
