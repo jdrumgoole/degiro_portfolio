@@ -161,38 +161,28 @@ The application works with DEGIRO's standard Excel export format. Your export sh
 
 By default, the application uses **Yahoo Finance** for stock prices - it's free and works great for most stocks. You can switch to other providers if needed:
 
-### Available Providers
+The application uses **Yahoo Finance** for stock prices — it's free and requires no configuration.
 
-1. **Twelve Data** (default) - Best for European stocks
-2. **Yahoo Finance** - Free, excellent coverage, no API key required
-3. **FMP (Financial Modeling Prep)** - Requires paid API key
-
-### Configuration
-
-Create a `.env` file in your working directory:
-
-```bash
-# Choose provider: 'twelvedata', 'yahoo', or 'fmp'
-PRICE_DATA_PROVIDER=yahoo
-
-# API keys (if using paid providers)
-TWELVEDATA_API_KEY=your_key_here
-FMP_API_KEY=your_key_here
-```
-
-**Note:** Yahoo Finance requires no configuration and provides excellent coverage for most stocks.
-
-See [Data Providers](data-providers.md) for detailed information about each provider.
+See [Data Providers](data-providers.md) for more details.
 
 ## Server Management
 
 Start/stop the server using these commands:
 
+**Mac/Linux:**
 ```bash
 degiro_portfolio start     # Start the server
 degiro_portfolio stop      # Stop the server
 degiro_portfolio restart   # Restart the server
 degiro_portfolio status    # Check if server is running
+```
+
+**Windows (Command Prompt or PowerShell):**
+```bash
+python -m degiro_portfolio start
+python -m degiro_portfolio stop
+python -m degiro_portfolio restart
+python -m degiro_portfolio status
 ```
 
 ## Next Steps

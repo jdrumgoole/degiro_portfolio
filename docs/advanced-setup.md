@@ -169,6 +169,43 @@ This backs up your database every day at 2 AM.
 4. Set action: Run a batch script that copies the file
 5. Save the task
 
+## Windows Notes
+
+On Windows, use `python -m degiro_portfolio` instead of the bare `degiro_portfolio` command:
+
+```bash
+# Command Prompt
+python -m degiro_portfolio start
+python -m degiro_portfolio stop
+python -m degiro_portfolio status
+```
+
+### Setting Environment Variables
+
+**Command Prompt (cmd.exe):**
+```bash
+set PRICE_DATA_PROVIDER=yahoo
+set DATABASE_URL=sqlite:///C:/Users/YourName/Documents/portfolio.db
+python -m degiro_portfolio start
+```
+
+**PowerShell:**
+```powershell
+$env:PRICE_DATA_PROVIDER = "yahoo"
+$env:DATABASE_URL = "sqlite:///C:/Users/YourName/Documents/portfolio.db"
+python -m degiro_portfolio start
+```
+
+### Running in the Background
+
+Use `Start-Process` in PowerShell to run the server detached:
+
+```powershell
+Start-Process python -ArgumentList "-m", "degiro_portfolio", "start" -WindowStyle Hidden
+```
+
+Or use Task Scheduler for automatic startup (see Option 3 above).
+
 ## Running Multiple Portfolios
 
 You can run multiple instances for different portfolios:

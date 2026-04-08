@@ -688,7 +688,7 @@ Tests for user interactions:
 
 Tests for core modules (run via FastAPI TestClient, no browser needed):
 - FastAPI endpoint tests (holdings, prices, charts, exchange rates, purge, etc.)
-- Price fetcher implementations (Yahoo, FMP, TwelveData) — all mocked
+- Price fetcher implementations (Yahoo Finance) — all mocked
 - Ticker resolution from ISIN
 - Index fetching
 - `__main__.py` CLI entry point
@@ -728,7 +728,7 @@ Tests use isolated test databases to avoid affecting production data:
 - **Worker DBs**: Each xdist worker gets its own copy (e.g., `test_portfolio_gw0.db`)
 - **Test Ports**: 8001+ (one per worker, production uses 8000)
 - **Caching**: Master DB is only rebuilt when input files change (SHA-256 hash check)
-- **No Real API Calls**: Test DB uses mock price data — no Yahoo Finance or Twelve Data calls during creation
+- **No Real API Calls**: Test DB uses mock price data — no external API calls during creation
 
 The test database is seeded with example data including:
 - 11 stocks from `example_data.xlsx` (NVDA, MSFT, META, GOOGL, AMD, SAP, ASML, etc.)

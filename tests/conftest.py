@@ -9,12 +9,15 @@ Supports parallel test execution with pytest-xdist:
 
 import os
 import hashlib
+import platform
 import shutil
 import subprocess
 import time
 import signal
 import filelock
 from pathlib import Path
+
+IS_WINDOWS = platform.system() == "Windows"
 
 import pytest
 from playwright.sync_api import Browser, BrowserContext, Page
@@ -57,6 +60,24 @@ def get_worker_id(config_or_request):
     if hasattr(config_or_request, 'config') and hasattr(config_or_request.config, 'workerinput'):
         return config_or_request.config.workerinput.get("workerid", "main")
     return "main"
+
+
+def _kill_process_tree(process: subprocess.Popen) -> None:
+    """Terminate a subprocess and its children (cross-platform)."""
+    try:
+        if IS_WINDOWS:
+            process.terminate()
+        else:
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        process.wait(timeout=5)
+    except (ProcessLookupError, subprocess.TimeoutExpired, OSError):
+        try:
+            if IS_WINDOWS:
+                process.kill()
+            else:
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+        except (ProcessLookupError, OSError):
+            pass
 
 
 def get_worker_port(worker_id):
@@ -298,19 +319,21 @@ def server_process(test_database, request):
 
     print(f"\n🚀 Starting test server on {TEST_HOST}:{test_port} (worker: {worker_id})")
 
-    # Start the server in a subprocess
+    # Start the server in a subprocess (platform-specific process group)
+    popen_kwargs = dict(env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if IS_WINDOWS:
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kwargs["preexec_fn"] = os.setsid
     process = subprocess.Popen(
         [
             "uv", "run", "uvicorn",
             "degiro_portfolio.main:app",
             "--host", TEST_HOST,
             "--port", str(test_port),
-            "--log-level", "warning"  # Reduce log noise during tests
+            "--log-level", "warning"
         ],
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        preexec_fn=os.setsid  # Create new process group for clean shutdown
+        **popen_kwargs
     )
 
     # Wait for server to be ready (reduced wait time)
@@ -326,26 +349,15 @@ def server_process(test_database, request):
                 break
         except (httpx.ConnectError, httpx.ReadTimeout):
             if i == max_retries - 1:
-                # Kill the process group
-                os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+                _kill_process_tree(process)
                 raise Exception(f"Test server failed to start on port {test_port}")
-            time.sleep(0.25)  # Reduced from 0.5
+            time.sleep(0.25)
 
     yield test_url
 
-    # Cleanup: Kill the process group to ensure all subprocesses are terminated
+    # Cleanup
     print(f"\n🛑 Shutting down test server")
-    try:
-        os.killpg(os.getpgid(process.pid), signal.SIGTERM)
-        process.wait(timeout=5)
-    except (ProcessLookupError, subprocess.TimeoutExpired):
-        # Force kill if graceful shutdown fails
-        try:
-            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-
-    # Ensure port is freed
+    _kill_process_tree(process)
     time.sleep(0.5)
 
 

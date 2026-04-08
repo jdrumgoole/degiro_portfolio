@@ -12,10 +12,12 @@ import os
 import sys
 import time
 import signal
+import platform
 import argparse
 import subprocess
 from pathlib import Path
 
+IS_WINDOWS = platform.system() == "Windows"
 
 # Configuration
 PROJECT_ROOT = Path(__file__).parent.absolute()
@@ -69,14 +71,13 @@ def start_server():
     # Open log file for output
     log_file = open(LOG_FILE, "w")
 
-    # Start process
-    process = subprocess.Popen(
-        cmd,
-        cwd=PROJECT_ROOT,
-        stdout=log_file,
-        stderr=subprocess.STDOUT,
-        start_new_session=True
-    )
+    # Start process (platform-specific detachment)
+    popen_kwargs = dict(cwd=PROJECT_ROOT, stdout=log_file, stderr=subprocess.STDOUT)
+    if IS_WINDOWS:
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        popen_kwargs["start_new_session"] = True
+    process = subprocess.Popen(cmd, **popen_kwargs)
 
     # Save PID
     PID_FILE.write_text(str(process.pid))
@@ -107,10 +108,13 @@ def stop_server():
     print(f"🛑 Stopping server (PID: {pid})...")
 
     try:
-        # Send SIGTERM for graceful shutdown
-        os.kill(pid, signal.SIGTERM)
+        # Graceful shutdown
+        if IS_WINDOWS:
+            os.kill(pid, signal.SIGTERM)
+        else:
+            os.kill(pid, signal.SIGTERM)
 
-        # Wait for process to terminate (up to 10 seconds)
+        # Wait for process to terminate (up to 5 seconds)
         for i in range(10):
             time.sleep(0.5)
             if not is_running():
@@ -119,7 +123,10 @@ def stop_server():
         # If still running, force kill
         if is_running():
             print("   Forcing shutdown...")
-            os.kill(pid, signal.SIGKILL)
+            if IS_WINDOWS:
+                os.kill(pid, signal.SIGTERM)  # Windows only supports SIGTERM
+            else:
+                os.kill(pid, signal.SIGKILL)
             time.sleep(0.5)
 
         # Clean up PID file

@@ -86,22 +86,6 @@ This application uses **Yahoo Finance** as the default data provider because:
 - Unofficial API (web scraping)
 - Occasional missing data or errors
 
-### Alternative: Twelve Data
-
-The application also supports **Twelve Data API**, but:
-- ❌ Free tier has limited European stock coverage
-- ❌ Your stocks (SAAB, Rheinmetall, Leonardo) not available
-- ✅ Excellent for US stocks
-- ✅ Real-time data (paid tiers)
-
-To use Twelve Data (if you upgrade to paid tier):
-```bash
-export PRICE_DATA_PROVIDER=twelvedata
-export TWELVEDATA_API_KEY=your_key
-```
-
-See **TWELVEDATA_SETUP.md** for details.
-
 ## Expected Behavior
 
 ### Scenario: Fresh Upload

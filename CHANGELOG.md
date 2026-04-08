@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.10] - 2026-04-08
+
+### Added
+- **Windows Support**: CLI script and test suite now work on Windows — platform-conditional subprocess creation and signal handling replace Unix-only `os.setsid`, `os.killpg`, and `signal.SIGKILL`
+- **Windows Documentation**: Added Windows-specific instructions to Getting Started, Advanced Setup (PowerShell, cmd.exe, background execution, Task Scheduler)
+
+### Changed
+- **Yahoo Finance Only**: Removed Twelve Data and FMP provider documentation and configuration — Yahoo Finance is now the sole supported provider
+- **Simplified .env.example**: Removed Twelve Data and FMP API key references
+- **Deleted TWELVEDATA_SETUP.md**: No longer needed
+
+### Fixed
+- **Windows CLI Crash**: `degiro_portfolio start/stop` no longer crashes on Windows with `ValueError: start_new_session is not supported`
+- **Windows Test Suite**: `tests/conftest.py` server fixture no longer uses Unix-only `preexec_fn=os.setsid` on Windows
+- **Data Provider Docs Contradiction**: Getting Started page no longer says both "Yahoo is default" and "Twelve Data is default"
+
 ## [0.3.9] - 2026-04-08
 
 ### Changed
