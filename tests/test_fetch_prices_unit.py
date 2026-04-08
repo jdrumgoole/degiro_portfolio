@@ -68,16 +68,22 @@ def test_fetch_stock_prices_handles_no_ticker(test_database):
     try:
         stock = session.query(Stock).first()
         if stock:
-            # Clear ticker
+            # Clear ticker, ISIN, and name so the resolver can't recover the ticker
             original_ticker = stock.yahoo_ticker
+            original_isin = stock.isin
+            original_name = stock.name
             stock.yahoo_ticker = None
+            stock.isin = None
+            stock.name = "UNKNOWN_TEST_STOCK"
 
             # Should return 0 or handle gracefully
             count = fetch_stock_prices(stock, session)
             assert count == 0
 
-            # Restore ticker
+            # Restore original values
             stock.yahoo_ticker = original_ticker
+            stock.isin = original_isin
+            stock.name = original_name
     finally:
         session.close()
 

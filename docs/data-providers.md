@@ -13,7 +13,7 @@ This guide explains the available options if you want to:
 
 ## Available Providers
 
-**Quick Recommendation**: Unless you have specific needs, stick with Yahoo Finance (the default) - it's free and works well.
+**Quick Recommendation**: Stick with Yahoo Finance (the default) - it's free and works well. As of v0.3.9, the `.env` file ships with `PRICE_DATA_PROVIDER=yahoo` as the default.
 
 ### Yahoo Finance (Default)
 

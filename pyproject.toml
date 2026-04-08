@@ -1,6 +1,6 @@
 [project]
 name = "degiro_portfolio"
-version = "0.3.8"
+version = "0.3.9"
 description = "DEGIRO portfolio tracking and visualization application"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -47,7 +47,7 @@ asyncio_mode = "auto"
 # Master DB created once, then copied for each worker (no API calls during tests)
 # Each worker gets its own isolated database and server port
 # Use -n auto for maximum parallelism, -n 0 for serial execution
-addopts = "-v --tb=short -n 4"
+addopts = "-v --tb=short -n 2"
 
 [dependency-groups]
 dev = [

@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.9] - 2026-04-08
+
+### Changed
+- **Default Price Provider**: Switched from Twelve Data to Yahoo Finance as the default price data provider in `.env` — Yahoo requires no API key and provides better European stock coverage
+- **Parallel Test Workers**: Reduced pytest-xdist workers from 4 to 2 for optimal performance with fewer server startup overhead
+
+### Fixed
+- **Ticker Resolver Crash**: Fixed `AttributeError` in `resolve_ticker_from_isin()` when ISIN is `None`
+- **Playwright Test Timeouts**: Fixed all playwright tests timing out because the page's JavaScript called `/api/refresh-live-prices` on load, blocking the single-threaded test server with external API calls for 30+ seconds. Resolved by intercepting blocking API endpoints at the browser context level
+- **Test DB Teardown Race**: Fixed workers deleting the shared master test database while other workers were still using it — only the controller now cleans up shared files
+
+### Testing
+- **Performance**: Test suite runtime reduced from ~97s to ~62s (36% faster)
+- **Database Caching**: Master test database is now cached between runs using SHA-256 hash of input files — only rebuilt when source code or test data changes
+- **Mocked API Tests**: Three slow unit tests (`test_update_market_data_endpoint`, `test_refresh_live_prices_endpoint`, `test_ensure_indices_exist_function`) now mock external API calls instead of hitting Yahoo Finance for all 11 stocks
+- **New Tests** (7 added, 133 total):
+  - `__main__.py` CLI entry point (0% → 86% coverage)
+  - `_get_fallback_rate()` exchange rate fallbacks
+  - `GET /api/exchange-rates` endpoint
+  - `POST /api/purge-database` endpoint via TestClient
+  - Uptime string formatting branches
+  - Real yfinance smoke test (single AAPL call verifies API integration)
+- **Regression Tests for Issue #1**: 8 tests covering `python -m degiro_portfolio` execution, Dutch column auto-detection, English column whitespace handling, and column validation
+- **Coverage**: 70% across all modules (141 tests total)
+- **Skipped Real API Calls**: Test database creation no longer fetches real stock prices — uses mock data exclusively, eliminating Twelve Data rate limit errors during tests
+
 ## [0.3.0] - 2026-01-15
 
 ### Added

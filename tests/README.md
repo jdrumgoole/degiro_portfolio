@@ -1,32 +1,38 @@
 # DEGIRO Portfolio Test Suite
 
-Comprehensive Playwright-based test suite for the DEGIRO Portfolio application.
+Comprehensive test suite using Pytest, Playwright, and FastAPI TestClient.
 
 ## Overview
 
 The test suite uses:
-- **pytest** - Test framework
-- **Playwright** - Browser automation for UI testing
-- **httpx** - HTTP client for API testing
+- **pytest** with **pytest-xdist** — parallel test execution (2 workers)
+- **Playwright** — browser automation for UI/integration tests
+- **FastAPI TestClient** — in-process API testing for unit tests
+- **pytest-mock** — mocking external API calls (Yahoo Finance, Twelve Data)
 
-### Test Isolation
+### Key Design Decisions
+
+- **No real API calls during tests** (except one yfinance smoke test for AAPL)
+- **Master test DB is cached** between runs — only rebuilt when source files change
+- **Each xdist worker** gets its own database copy and server port
+- **Blocking API endpoints** (`/api/refresh-live-prices`, `/api/update-market-data`) are intercepted at the Playwright browser context level to prevent server hangs
+
+## Test Isolation
 
 The test suite is **completely isolated** from the production application:
 
-- **Dedicated Test Database**: `tests/.test_data/test_portfolio.db`
-  - Created fresh for each test session
+- **Dedicated Test Databases**: `tests/.test_data/test_portfolio_gw0.db`, `gw1.db`, etc.
+  - Copied from a cached master database for each worker
   - Automatically cleaned up after tests complete
   - Never interferes with production `degiro_portfolio.db`
 
-- **Dedicated Test Server**: `http://127.0.0.1:8001`
-  - Runs on port **8001** (production uses **8000**)
-  - Started automatically during test session
-  - Terminated automatically after tests complete
+- **Dedicated Test Servers**: `http://127.0.0.1:8001`, `:8002`, etc.
+  - One per xdist worker
+  - Started/terminated automatically
 
 - **Isolated Environment Variables**:
-  - `DATABASE_URL` set to test database path
+  - `DATABASE_URL` set to worker-specific test database
   - Original environment restored after tests
-  - No cross-contamination with production settings
 
 **You can safely run tests while the production server is running!**
 
@@ -34,197 +40,104 @@ The test suite is **completely isolated** from the production application:
 
 ```
 tests/
-├── conftest.py                      # Pytest fixtures and configuration
-├── test_portfolio_overview.py       # Portfolio page UI tests
-├── test_stock_charts.py            # Stock chart visualization tests
-├── test_api_endpoints.py           # API endpoint tests
-├── test_interactive_features.py    # Interactive UI feature tests
+├── conftest.py                      # Fixtures, DB caching, server lifecycle
+├── test_main_unit.py               # FastAPI endpoint unit tests (26 tests)
+├── test_fetch_prices_unit.py       # Price fetching unit tests
+├── test_fetch_indices_unit.py      # Index fetching unit tests
+├── test_price_fetchers_unit.py     # Price fetcher provider tests
+├── test_ticker_resolver_unit.py    # Ticker resolver unit tests
+├── test_portfolio_overview.py      # Portfolio UI tests (Playwright)
+├── test_stock_charts.py            # Chart visualization tests (Playwright)
+├── test_api_endpoints.py           # API endpoint tests (Playwright)
+├── test_interactive_features.py    # Interactive UI tests (Playwright)
+├── test_zzz_purge_database.py      # Database purge tests (Playwright, runs last)
 └── README.md                       # This file
 ```
 
 ## Running Tests
 
-### Run All Tests
-
 ```bash
-cd /Users/jdrumgoole/GIT/degiro_portfolio
-uv run pytest tests/ -v
+# Run complete test suite (parallel, 2 workers)
+uv run python -m pytest
+
+# Run with verbose output
+uv run python -m pytest -v
+
+# Run a single test file
+uv run python -m pytest tests/test_main_unit.py -v
+
+# Run a single test
+uv run python -m pytest tests/test_main_unit.py::test_ping_endpoint -v
+
+# Run with coverage
+uv run python -m pytest --cov=degiro_portfolio --cov-report=term-missing
+
+# Force rebuild of cached test database
+rm -rf tests/.test_data/ && uv run python -m pytest
 ```
 
-### Run Specific Test File
+## Test Database Caching
 
-```bash
-uv run pytest tests/test_portfolio_overview.py -v
-```
+The master test database (`tests/.test_data/master_test_portfolio.db`) is cached between runs:
 
-### Run Single Test
+1. On first run, conftest.py imports `example_data.xlsx`, resolves tickers, and adds 180 days of mock price data
+2. A SHA-256 hash of all input files is stored alongside the DB
+3. On subsequent runs, if the hash matches, the cached DB is reused (prints "Using cached master test database")
+4. If any input file changes (conftest.py, example_data.xlsx, ticker_resolver.py, config.py, import_data.py, database.py), the DB is rebuilt
 
-```bash
-uv run pytest tests/test_portfolio_overview.py::test_page_loads -v
-```
-
-### Run with Output
-
-```bash
-uv run pytest tests/ -v -s
-```
+**Input files that trigger rebuild:**
+- `tests/conftest.py`
+- `example_data.xlsx`
+- `src/degiro_portfolio/ticker_resolver.py`
+- `src/degiro_portfolio/config.py`
+- `src/degiro_portfolio/import_data.py`
+- `src/degiro_portfolio/database.py`
 
 ## Test Fixtures
 
-### `test_database`
-- **Scope**: session
-- **Purpose**: Creates a test database with example data
-- **Data**: Uses `example_data.xlsx` (11 stocks, 28 transactions)
-- **Cleanup**: Removes test database after session
+### `test_database` (session-scoped)
+Creates worker-specific test database from cached master. Reinitializes the SQLAlchemy engine.
 
-### `server_process`
-- **Scope**: session
-- **Purpose**: Starts FastAPI server on port 8001 for testing
-- **Dependencies**: Requires `test_database`
-- **Cleanup**: Terminates server after session
+### `server_process` (session-scoped)
+Starts a uvicorn subprocess on a worker-specific port (8001+). Waits for `/api/ping` to return 200.
 
-### `browser`
-- **Scope**: session
-- **Purpose**: Creates Playwright Chromium browser instance
-- **Mode**: Headless
+### `context` (module-scoped)
+Playwright browser context with route interception for blocking API endpoints.
 
-### `context`
-- **Scope**: function
-- **Purpose**: Creates new browser context for each test
-- **Viewport**: 1920x1080
+### `page` (function-scoped)
+Navigates to the test server and waits for `.stock-card` elements to load.
 
-### `page`
-- **Scope**: function
-- **Purpose**: Creates new page and navigates to app
-- **Dependencies**: Uses `context` and `server_process`
-
-### `expected_stocks`
-- **Scope**: function
-- **Purpose**: Provides expected stock data for validation
-- **Data**: 11 stocks (5 US + 6 European)
-
-## Test Coverage
-
-### Portfolio Overview Tests (17 tests)
-- Page loading and title
-- Stock card display and information
-- Latest prices and daily changes
-- Ticker symbols and exchanges
-- Clickable links (company names, tickers)
-- Market data status
-- Update button
-- Portfolio summary
-- Responsive design
-
-### Stock Charts Tests (15 tests)
-- Chart loading and rendering
-- Multiple chart types
-- Candlestick data
-- Transaction markers
-- Interactive features
-- Axis labels
-- Stock switching
-- European stock support
-- SEK currency support
-
-### API Endpoint Tests (14 tests)
-- Holdings endpoint
-- Market data status
-- Stock prices
-- Transactions
-- Chart data
-- Portfolio performance
-- Error handling
-- Data validation
-
-### Interactive Features Tests (19 tests)
-- Button interactions
-- Link behavior
-- Stock selection
-- Active states
-- Visual feedback
-- Price formatting
-- Color coding
-- Responsiveness
-
-## Test Database
-
-The test suite creates a temporary SQLite database (`test_portfolio.db`) with:
-- 11 stocks from `example_data.xlsx`
-- 28 transactions (14 US + 14 European)
-- Historical price data fetched from Yahoo Finance
-- Market index data (S&P 500, Euro Stoxx 50)
-
-**Note**: Database creation includes real API calls to Yahoo Finance, which can take 30-60 seconds.
-
-## Known Issues
-
-1. **Slow Initial Run**: First test run fetches real price data (~30-60s)
-2. **Ticker Resolution**: Some European stocks may not resolve tickers automatically
-3. **Flaky Tests**: Network-dependent tests may occasionally timeout
-4. **Display Issues**: Some tests expect specific UI elements that may vary
+### `client` (function-scoped, test_main_unit.py)
+FastAPI TestClient for in-process API testing without a real server.
 
 ## Test Data
 
-Example stocks included in test database:
+11 stocks from `example_data.xlsx`:
 
 **US Tech Stocks:**
-- NVIDIA (NVDA) - 129 shares, 4 transactions
-- Microsoft (MSFT) - 30 shares, 3 transactions
-- Meta (META) - 68 shares, 2 transactions
-- Alphabet (GOOGL) - 57 shares, 2 transactions
-- AMD - 97 shares, 3 transactions
+- NVIDIA (NVDA) — 129 shares, 4 transactions
+- Microsoft (MSFT) — 30 shares, 3 transactions
+- Meta (META) — 68 shares, 2 transactions
+- Alphabet (GOOGL) — 57 shares, 2 transactions
+- AMD — 97 shares, 3 transactions
 
 **European Tech Stocks:**
-- ASML (Netherlands) - 33 shares, 3 transactions
-- SAP (Germany) - 75 shares, 2 transactions
-- Infineon (Germany) - 400 shares, 3 transactions
-- Nokia (Finland) - 900 shares, 2 transactions
-- Ericsson (Sweden) - 1400 shares, 2 transactions
-- STMicroelectronics (France) - 240 shares, 2 transactions
+- ASML (Netherlands) — 33 shares, 3 transactions
+- SAP (Germany) — 75 shares, 2 transactions
+- Infineon (Germany) — 400 shares, 3 transactions
+- Nokia (Finland) — 900 shares, 2 transactions
+- Ericsson (Sweden) — 1400 shares, 2 transactions
+- STMicroelectronics (France) — 240 shares, 2 transactions
 
-## Debugging Tests
+## Debugging
 
-### View Browser Actions
-
-Run tests in headed mode:
 ```bash
-uv run pytest tests/ --headed
+# Run single test with output
+uv run python -m pytest tests/test_file.py::test_name -v -s
+
+# Playwright visual debugger
+PWDEBUG=1 uv run python -m pytest tests/test_file.py::test_name
+
+# Show slowest tests
+uv run python -m pytest --durations=10
 ```
-
-### Take Screenshots
-
-Add to test:
-```python
-page.screenshot(path="debug.png")
-```
-
-### Print Page Content
-
-Add to test:
-```python
-print(page.content())
-```
-
-### Slow Down Actions
-
-```python
-page.set_default_timeout(5000)  # 5 second timeout
-```
-
-## CI/CD Integration
-
-For CI environments, ensure:
-1. Playwright browsers are installed: `uv run playwright install chromium`
-2. Set headless mode (default)
-3. Handle network timeouts gracefully
-4. Clean up test database after run
-
-## Contributing
-
-When adding new tests:
-1. Use descriptive test names
-2. Add docstrings explaining what is tested
-3. Use appropriate fixtures
-4. Clean up any test data
-5. Update this README if adding new test categories

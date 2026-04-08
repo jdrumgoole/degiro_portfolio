@@ -567,20 +567,25 @@ When making a release:
 
 The DEGIRO Portfolio application includes a comprehensive test suite using Pytest and Playwright for end-to-end testing.
 
-**Current Coverage**: 125 tests with 70% code coverage
+**Current Coverage**: 133 tests with 70% code coverage
+
+Tests run in parallel using pytest-xdist (2 workers). External API calls are mocked in unit tests; a single real yfinance smoke test verifies API connectivity. The master test database is cached between runs and only rebuilt when source files change.
 
 ### Test Structure
 
 ```
 tests/
-├── conftest.py                      # Pytest fixtures and configuration
-├── test_portfolio_overview.py      # Portfolio UI tests (17 tests)
-├── test_stock_charts.py            # Chart visualization tests (15 tests)
-├── test_api_endpoints.py           # API endpoint tests (14 tests)
-├── test_interactive_features.py    # User interaction tests (19 tests)
-├── test_price_fetchers_unit.py     # Price fetcher unit tests
+├── conftest.py                      # Fixtures, DB caching, server lifecycle
+├── test_main_unit.py               # FastAPI endpoint unit tests (26 tests)
+├── test_fetch_prices_unit.py       # Price fetching unit tests
+├── test_fetch_indices_unit.py      # Index fetching unit tests
+├── test_price_fetchers_unit.py     # Price fetcher provider tests
 ├── test_ticker_resolver_unit.py    # Ticker resolver unit tests
-├── test_zzz_purge_database.py      # Database purge tests (runs last)
+├── test_portfolio_overview.py      # Portfolio UI tests (Playwright)
+├── test_stock_charts.py            # Chart visualization tests (Playwright)
+├── test_api_endpoints.py           # API endpoint tests (Playwright)
+├── test_interactive_features.py    # Interactive UI tests (Playwright)
+├── test_zzz_purge_database.py      # Database purge tests (Playwright, runs last)
 └── README.md                       # Testing documentation
 ```
 
@@ -679,13 +684,16 @@ Tests for user interactions:
 - Responsive behavior
 - Error handling
 
-#### Unit Tests (55+ tests)
+#### Unit Tests (70+ tests)
 
-Tests for core modules:
-- Price fetcher implementations (Yahoo, FMP, TwelveData)
+Tests for core modules (run via FastAPI TestClient, no browser needed):
+- FastAPI endpoint tests (holdings, prices, charts, exchange rates, purge, etc.)
+- Price fetcher implementations (Yahoo, FMP, TwelveData) — all mocked
 - Ticker resolution from ISIN
-- Configuration management
-- Data processing logic
+- Index fetching
+- `__main__.py` CLI entry point
+- Fallback exchange rates and uptime formatting
+- Real yfinance smoke test (single AAPL call)
 
 ### Test Fixtures
 
@@ -714,17 +722,19 @@ def test_example(page: Page):
 
 ### Test Database
 
-Tests use an isolated test database to avoid affecting production data:
+Tests use isolated test databases to avoid affecting production data:
 
-- **Test DB**: `test-degiro_portfolio.db`
-- **Test Port**: 8001 (production uses 8000)
-- **Automatic Cleanup**: Database is deleted after tests
+- **Master DB**: `tests/.test_data/master_test_portfolio.db` — created once, cached between runs
+- **Worker DBs**: Each xdist worker gets its own copy (e.g., `test_portfolio_gw0.db`)
+- **Test Ports**: 8001+ (one per worker, production uses 8000)
+- **Caching**: Master DB is only rebuilt when input files change (SHA-256 hash check)
+- **No Real API Calls**: Test DB uses mock price data — no Yahoo Finance or Twelve Data calls during creation
 
 The test database is seeded with example data including:
-- Multiple stocks (NVDA, MSFT, META, GOOGL, AMD, SAP, ASML, etc.)
-- Transaction history
-- Historical prices
-- Market indices (S&P 500, Euro Stoxx 50)
+- 11 stocks from `example_data.xlsx` (NVDA, MSFT, META, GOOGL, AMD, SAP, ASML, etc.)
+- 28 transactions across USD, EUR, and SEK currencies
+- 180 days of synthetic price data per stock
+- Market indices (S&P 500, Euro Stoxx 50) with mock prices
 
 ### Writing New Tests
 

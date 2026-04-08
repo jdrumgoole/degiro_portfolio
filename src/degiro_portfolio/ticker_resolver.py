@@ -49,6 +49,9 @@ def resolve_ticker_from_isin(isin: str, currency: str = None) -> Optional[str]:
     Returns:
         Yahoo Finance ticker symbol if found, None otherwise
     """
+    if not isin:
+        return None
+
     # First check manual mapping (for stocks with known issues)
     if isin in MANUAL_TICKER_MAPPING:
         mapping = MANUAL_TICKER_MAPPING[isin]

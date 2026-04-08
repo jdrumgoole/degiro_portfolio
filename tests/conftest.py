@@ -8,6 +8,7 @@ Supports parallel test execution with pytest-xdist:
 """
 
 import os
+import hashlib
 import shutil
 import subprocess
 import time
@@ -25,7 +26,27 @@ TEST_HOST = "127.0.0.1"
 TEST_DB_DIR = Path(__file__).parent / ".test_data"
 MASTER_DB_PATH = TEST_DB_DIR / "master_test_portfolio.db"
 MASTER_DB_LOCK = TEST_DB_DIR / "master_test_portfolio.lock"
+CACHE_HASH_PATH = TEST_DB_DIR / "master_test_portfolio.cache_hash"
 EXAMPLE_DATA = "example_data.xlsx"
+
+# Files whose content determines the master DB — if any change, rebuild
+_PROJECT_ROOT = Path(__file__).parent.parent
+_CACHE_INPUT_FILES = [
+    Path(__file__),  # conftest.py itself
+    _PROJECT_ROOT / "example_data.xlsx",
+    _PROJECT_ROOT / "src" / "degiro_portfolio" / "ticker_resolver.py",
+    _PROJECT_ROOT / "src" / "degiro_portfolio" / "config.py",
+    _PROJECT_ROOT / "src" / "degiro_portfolio" / "import_data.py",
+    _PROJECT_ROOT / "src" / "degiro_portfolio" / "database.py",
+]
+
+
+def _compute_cache_hash() -> str:
+    """Compute SHA-256 hash of all files that affect master DB content."""
+    hasher = hashlib.sha256()
+    for fpath in _CACHE_INPUT_FILES:
+        hasher.update(fpath.read_bytes())
+    return hasher.hexdigest()
 
 
 def get_worker_id(config_or_request):
@@ -71,9 +92,15 @@ def create_master_test_database():
 
     print(f"\n📦 Creating master test database: {MASTER_DB_PATH}")
 
-    # Import the example data
+    # Import the example data (skip real price fetching - we add mock data below)
+    from degiro_portfolio import import_data
     from degiro_portfolio.import_data import import_transactions
-    import_transactions(EXAMPLE_DATA)
+    original_fetch = import_data.fetch_stock_prices
+    import_data.fetch_stock_prices = lambda *a, **kw: 0
+    try:
+        import_transactions(EXAMPLE_DATA)
+    finally:
+        import_data.fetch_stock_prices = original_fetch
 
     # Add mock price data for tests (avoid API calls during testing)
     from degiro_portfolio.database import Stock, StockPrice, Index, IndexPrice, SessionLocal
@@ -156,10 +183,18 @@ def pytest_configure(config):
     test_db_path = get_worker_db_path(worker_id)
 
     # Use a file lock to ensure only one process creates the master database
+    # Cache the master DB between runs — only rebuild when input files change
     with filelock.FileLock(str(MASTER_DB_LOCK), timeout=120):
-        if not MASTER_DB_PATH.exists():
-            # First process creates the master database
+        current_hash = _compute_cache_hash()
+        cached_hash = CACHE_HASH_PATH.read_text().strip() if CACHE_HASH_PATH.exists() else None
+
+        if MASTER_DB_PATH.exists() and cached_hash == current_hash:
+            print(f"♻️  Using cached master test database (hash match)")
+        else:
+            if MASTER_DB_PATH.exists():
+                MASTER_DB_PATH.unlink()
             create_master_test_database()
+            CACHE_HASH_PATH.write_text(current_hash)
 
     # Copy master database to worker-specific path
     if test_db_path.exists():
@@ -205,16 +240,14 @@ def test_environment(request):
     if test_db_path.exists():
         test_db_path.unlink()
 
-    # Remove test data directory if empty (ignore errors)
-    try:
-        # Only try to remove master DB and lock if we're the last worker
-        # This is a best-effort cleanup
-        for f in [MASTER_DB_PATH, MASTER_DB_LOCK]:
-            if f.exists():
-                f.unlink()
-        TEST_DB_DIR.rmdir()
-    except OSError:
-        pass  # Directory not empty or doesn't exist
+    # Only the controller (main) cleans up the lock file
+    # Master DB and cache hash are preserved for reuse across runs
+    if worker_id == "main":
+        try:
+            if MASTER_DB_LOCK.exists():
+                MASTER_DB_LOCK.unlink()
+        except OSError:
+            pass
 
 
 @pytest.fixture(scope="session")
@@ -275,8 +308,8 @@ def server_process(test_database, request):
             "--log-level", "warning"  # Reduce log noise during tests
         ],
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
         preexec_fn=os.setsid  # Create new process group for clean shutdown
     )
 
@@ -331,6 +364,16 @@ def context(browser: Browser):
         viewport={"width": 1920, "height": 1080},
         locale="en-US"
     )
+    # Block endpoints that make external API calls and would block the
+    # single-threaded test server (causing playwright timeouts)
+    def mock_api_response(route):
+        route.fulfill(
+            status=200,
+            content_type="application/json",
+            body='{"updated": 0, "quotes": [], "errors": []}'
+        )
+    context.route("**/api/refresh-live-prices", mock_api_response)
+    context.route("**/api/update-market-data", mock_api_response)
     yield context
     context.close()
 
