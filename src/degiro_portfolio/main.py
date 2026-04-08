@@ -850,13 +850,16 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
             # Read Excel file
             df = pd.read_excel(tmp_file_path)
 
-            # Validate required columns using config
+            # Auto-detect language and validate required columns
             is_valid, missing_columns = Config.validate_excel_columns(df.columns.tolist())
             if not is_valid:
                 return JSONResponse(
                     status_code=400,
                     content={"success": False, "message": f"Missing required columns: {', '.join(missing_columns)}"}
                 )
+
+            # Normalize column names (handles trailing spaces like 'Price ' -> 'Price ')
+            df = Config.normalize_dataframe_columns(df)
 
             # Helper function to determine native currency
             def determine_native_currency(df_data, product):

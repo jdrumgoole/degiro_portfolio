@@ -97,6 +97,19 @@ def import_transactions(excel_file=None):
     print(f"Reading {excel_file}...")
     df = pd.read_excel(excel_file)
 
+    # Auto-detect language and normalize column names
+    lang = Config.detect_and_set_column_mapping(df.columns.tolist())
+    if lang:
+        print(f"Detected export language: {lang}")
+    df = Config.normalize_dataframe_columns(df)
+
+    # Validate required columns
+    is_valid, missing_columns = Config.validate_excel_columns(df.columns.tolist())
+    if not is_valid:
+        print(f"Missing required columns: {', '.join(missing_columns)}")
+        print(f"Available columns: {', '.join(df.columns.tolist())}")
+        raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
+
     print(f"Found {len(df)} transactions\n")
 
     session = SessionLocal()
