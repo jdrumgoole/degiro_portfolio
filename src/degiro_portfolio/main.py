@@ -15,6 +15,7 @@ import yfinance as yf
 
 from .database import get_db, Stock, Transaction, StockPrice, Index, IndexPrice, ExchangeRate, init_db
 from .config import Config, get_column
+from .import_data import parse_date
 from .fetch_prices import fetch_stock_prices
 from .price_fetchers import get_price_fetcher, yahoo_rate_limiter
 from .ticker_resolver import resolve_ticker_from_isin
@@ -847,19 +848,15 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
             tmp_file_path = tmp_file.name
 
         try:
-            # Read Excel file
+            # Read Excel file and rename columns by position
             df = pd.read_excel(tmp_file_path)
-
-            # Auto-detect language and validate required columns
-            is_valid, missing_columns = Config.validate_excel_columns(df.columns.tolist())
-            if not is_valid:
+            try:
+                df = Config.normalize_degiro_columns(df)
+            except ValueError as e:
                 return JSONResponse(
                     status_code=400,
-                    content={"success": False, "message": f"Missing required columns: {', '.join(missing_columns)}"}
+                    content={"success": False, "message": str(e)}
                 )
-
-            # Normalize column names (handles trailing spaces like 'Price ' -> 'Price ')
-            df = Config.normalize_dataframe_columns(df)
 
             # Helper function to determine native currency
             def determine_native_currency(df_data, product):
@@ -902,13 +899,8 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
                 else:
                     stocks_to_fetch_prices.add(stock.id)  # Also fetch for existing stocks if needed
 
-                # Parse date and time (DEGIRO exports have separate columns)
-                date_str = str(row[get_column('date')])
-                time_str = str(row[get_column('time')])
-
-                # Combine date and time strings
-                datetime_str = f"{date_str} {time_str}"
-                trans_date = datetime.strptime(datetime_str, "%d-%m-%Y %H:%M")
+                # Parse date and time
+                trans_date = parse_date(row[get_column('date')], str(row[get_column('time')]))
 
                 # Check if transaction already exists
                 existing_trans = db.query(Transaction).filter(
