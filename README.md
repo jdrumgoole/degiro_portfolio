@@ -28,101 +28,83 @@ All data is stored securely on your own computer - nothing is sent to external s
 ![Stock Detail - NVIDIA](https://raw.githubusercontent.com/jdrumgoole/degiro_portfolio/main/screenshots/stock-detail-nvidia.png)
 *Detailed charts showing NVIDIA price history, buy transactions, position value %, and market comparison*
 
-## Installation
+## Quick Start
 
-### Step 1: Install Python
-
-You need Python 3.11 or newer. [Download Python here](https://www.python.org/downloads/) if you don't have it.
-
-To check if you have Python, open Terminal (Mac/Linux) or Command Prompt (Windows) and type:
-```bash
-python --version
-```
-
-### Step 2: Install the Application
-
-Open Terminal (Mac/Linux) or Command Prompt (Windows) and run:
+### 1. Install
 
 ```bash
 pip install degiro_portfolio
 ```
 
-That's it! The application is now installed.
+You need Python 3.10 or newer ([download here](https://www.python.org/downloads/)).
 
-### Step 3: Start the Application
-
-Run this command:
+### 2. Launch
 
 ```bash
-degiro_portfolio start
+python -m degiro_portfolio --desktop
 ```
 
-**On Windows**, if that doesn't work, try:
+The application opens in a native window. No browser needed - the server starts and stops automatically with the window.
+
+### 3. Upload Your Transactions
+
+1. Export your transactions from DEGIRO (Activity -> Transactions -> Export as Excel)
+2. Click **Upload Transactions** in the app
+3. Select your Excel file
+
+The app automatically downloads stock prices and displays your portfolio.
+
+## Alternative: Web Server Mode
+
+If you prefer to use a browser, you can run the application as a web server:
+
 ```bash
-python -m degiro_portfolio start
+pip install degiro_portfolio
+python -m degiro_portfolio
 ```
 
-You should see a message like "Server started on port 8000".
+Then open `http://localhost:8000` in your browser.
 
-### Step 4: Open the Dashboard
-
-Open your web browser and go to:
-```
-http://localhost:8000
-```
-
-You should now see your portfolio dashboard!
-
-## Using the Application
-
-### Uploading Your Transactions
-
-1. **Export from DEGIRO:**
-   - Log in to your DEGIRO account
-   - Go to Activity → Transactions
-   - Export your transactions as an Excel file
-
-2. **Upload to the Application:**
-   - Click the **📤 Upload Transactions** button
-   - Select your DEGIRO Excel file
-   - Wait for the upload to complete
-
-The app will automatically download prices and display your portfolio!
-
-### Updating Stock Prices
-
-Click the **📈 Update Market Data** button to refresh all stock prices.
-
-### Managing the Server
-
+**Mac/Linux** also supports the CLI:
 ```bash
 degiro_portfolio start    # Start the server
 degiro_portfolio stop     # Stop the server
-degiro_portfolio restart  # Restart the server
-degiro_portfolio status   # Check if it's running
+degiro_portfolio status   # Check if running
 ```
 
-**On Windows**, replace `degiro_portfolio` with `python -m degiro_portfolio` in the commands above.
+**Windows**: Use `python -m degiro_portfolio` for all commands.
+
+## Using the Application
+
+### Uploading Transactions
+
+1. **Export from DEGIRO:**
+   - Log in to your DEGIRO account
+   - Go to Activity -> Transactions
+   - Export as Excel (.xlsx)
+   - Both English and Dutch exports are supported
+
+2. **Upload to the Application:**
+   - Click the **Upload Transactions** button
+   - Select your DEGIRO Excel file
+   - Wait for the upload to complete
+
+### Updating Stock Prices
+
+Click the **Update Market Data** button to refresh all stock prices. Prices are fetched from Yahoo Finance (free, no API key needed).
 
 ### Clearing All Data
 
-To start fresh:
-1. Click the red **🗑️ Purge All Data** button
-2. Confirm the deletion
-
-**Warning**: This permanently deletes all your data.
+Click **Purge All Data** to start fresh. This permanently deletes all stored data.
 
 ## Understanding Your Portfolio
-
-### Portfolio Summary
-Shows your total investment value and whether you're up or down overall.
 
 ### Stock Cards
 Each stock shows:
 - **Company name** - Click to search for investor relations info
-- **Number of shares** - How many shares you own
-- **Current price** - Latest price with today's change (▲ up, ▼ down)
-- **Position value** - Total value in EUR
+- **Number of shares** you own
+- **Current price** with daily change
+- **Position value** in EUR
 - **Ticker symbol** - Click to view on Google Finance
 
 ### Charts
@@ -134,9 +116,9 @@ Click any stock card to see:
 
 ## Features
 
-- Import DEGIRO transaction exports (Excel files)
-- Upload new transactions via web interface
-- Automatic historical price downloads
+- Native desktop app with embedded web view (Mac, Windows, Linux)
+- Import DEGIRO transaction exports (English and Dutch)
+- Automatic historical price downloads via Yahoo Finance
 - Live exchange rate conversion (EUR, USD, SEK, GBP)
 - Interactive candlestick charts with transaction markers
 - Portfolio performance tracking
@@ -147,28 +129,25 @@ Click any stock card to see:
 ## Data Privacy
 
 All your financial data stays on your computer:
-- ✅ Data stored locally in `degiro_portfolio.db`
-- ✅ Only connects to internet for stock prices
-- ❌ Does NOT send your transaction data anywhere
-- ❌ Does NOT require creating an account
+- Data stored locally in `degiro_portfolio.db`
+- Only connects to internet for stock prices
+- Does NOT send your transaction data anywhere
+- Does NOT require creating an account
 
 ## Troubleshooting
 
-### The server won't start
-- Make sure port 8000 isn't already in use
-- Check if it's running: `degiro_portfolio status`
-- Try restarting: `degiro_portfolio restart`
+### The app won't start
+- Make sure Python 3.10+ is installed: `python --version`
+- On Windows: use `python -m degiro_portfolio --desktop`
+- If port 8000 is busy: `python -m degiro_portfolio --desktop --port 8001`
 
 ### My stocks don't show prices
-- Click the "Update Market Data" button
+- Click "Update Market Data"
 - Check your internet connection
 
 ### The upload fails
-- Make sure you're uploading a DEGIRO transaction export (Excel format)
-- Verify the file isn't corrupted
-
-### I see a "Connection refused" error
-- The server isn't running - start it with: `degiro_portfolio start`
+- Make sure you're uploading a DEGIRO transaction export (.xlsx)
+- Both English and Dutch exports are supported
 
 ## Getting Help
 

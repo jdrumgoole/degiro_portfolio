@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-04-09
+
+### Added
+- **Desktop Application Mode**: New native desktop app using pywebview — launch with `python -m degiro_portfolio --desktop`. Opens in a native window (WebKit on Mac, WebView2 on Windows) with no browser needed. Server starts and stops automatically with the window
+- **`desktop.py` module**: Multiprocessing server management, pywebview window lifecycle, graceful shutdown via `/api/shutdown` endpoint
+- **`degiro-portfolio-desktop` console script**: Direct entry point for desktop mode
+- **`--desktop` and `--port` CLI flags**: `python -m degiro_portfolio --desktop --port 8001`
+- **`/api/shutdown` endpoint**: Graceful server shutdown (used by desktop mode window close and Ctrl-C)
+- **`pywebview` included in base install**: Desktop mode works out of the box with `pip install degiro_portfolio`
+
+### Changed
+- **Documentation rewritten**: Desktop app is now the primary recommended way to use the application. Web server mode documented as the alternative
+- **README**: Quick Start leads with desktop mode installation and launch
+- **Getting Started**: Desktop app is Step 1, web server mode is under "Alternative"
+
 ## [0.3.10] - 2026-04-08
 
 ### Added

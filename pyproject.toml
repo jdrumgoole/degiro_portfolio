@@ -1,6 +1,6 @@
 [project]
 name = "degiro_portfolio"
-version = "0.3.10"
+version = "0.4.0"
 description = "DEGIRO portfolio tracking and visualization application"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -16,7 +16,11 @@ dependencies = [
     "twelvedata>=1.2.25",
     "python-dotenv>=1.2.1",
     "requests>=2.31.0",
+    "pywebview>=5.1",
 ]
+
+[project.scripts]
+degiro-portfolio-desktop = "degiro_portfolio.desktop:main"
 
 [project.optional-dependencies]
 dev = [

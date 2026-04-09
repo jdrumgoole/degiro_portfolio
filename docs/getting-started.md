@@ -21,32 +21,30 @@ Open Terminal (Mac/Linux) or Command Prompt (Windows) and run:
 pip install degiro_portfolio
 ```
 
-This downloads and installs the application automatically.
+This installs the application including desktop mode support.
 
 **Note for Developers**: If you want to install from source code, see the [Developer Appendix](developer-appendix.md).
 
 ## Quick Start
 
-### 1. Start the Server
-
-After installation, start the application by running:
+### 1. Launch the Desktop App
 
 ```bash
-degiro_portfolio start
+python -m degiro_portfolio --desktop
 ```
 
-**On Windows**, you might need to run:
+The application opens in a native window — no browser needed. The server starts and stops automatically with the window.
+
+On Mac, the window uses WebKit; on Windows, it uses WebView2. Everything runs locally on your computer.
+
+To use a different port (e.g., if 8000 is busy):
 ```bash
-python -m degiro_portfolio start
+python -m degiro_portfolio --desktop --port 8001
 ```
-
-You should see a message like: `Server started on port 8000`
-
-**What's a server?** Think of it as a small program running on your computer that powers the web interface. It only runs on your computer - nothing is sent to the internet except to download stock prices.
 
 ### 2. Open the Dashboard
 
-Open your web browser (Chrome, Firefox, Safari, etc.) and go to:
+If running in web mode, open your web browser (Chrome, Firefox, Safari, etc.) and go to:
 
 ```
 http://localhost:8000
@@ -157,19 +155,21 @@ The application works with DEGIRO's standard Excel export format. Your export sh
 
 **Don't worry about the format** - if you export from DEGIRO correctly, the format will be correct automatically.
 
-## Advanced: Configure Data Provider (Optional)
+## Stock Prices
 
-By default, the application uses **Yahoo Finance** for stock prices - it's free and works great for most stocks. You can switch to other providers if needed:
+The application uses **Yahoo Finance** for stock prices — it's free and requires no configuration. See [Data Providers](data-providers.md) for more details.
 
-The application uses **Yahoo Finance** for stock prices — it's free and requires no configuration.
+## Alternative: Web Server Mode
 
-See [Data Providers](data-providers.md) for more details.
+If you prefer to use a browser instead of the desktop app, run without `--desktop`:
 
-## Server Management
+```bash
+python -m degiro_portfolio
+```
 
-Start/stop the server using these commands:
+Then open `http://localhost:8000` in your browser.
 
-**Mac/Linux:**
+**Mac/Linux** also supports the CLI for background server management:
 ```bash
 degiro_portfolio start     # Start the server
 degiro_portfolio stop      # Stop the server
@@ -177,13 +177,7 @@ degiro_portfolio restart   # Restart the server
 degiro_portfolio status    # Check if server is running
 ```
 
-**Windows (Command Prompt or PowerShell):**
-```bash
-python -m degiro_portfolio start
-python -m degiro_portfolio stop
-python -m degiro_portfolio restart
-python -m degiro_portfolio status
-```
+**Windows**: Use `python -m degiro_portfolio` for all commands.
 
 ## Next Steps
 

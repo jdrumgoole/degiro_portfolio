@@ -4,6 +4,12 @@ This page explains everything the application can do for you.
 
 ## Key Feature Highlights
 
+### 🖥️ Native Desktop App
+- Runs as a native window on Mac (WebKit), Windows (WebView2), and Linux
+- No browser required - just `python -m degiro_portfolio --desktop`
+- Server starts and stops automatically with the window
+- Also available as a web server for browser-based access
+
 ### 📊 Real-Time Portfolio Tracking
 - View all your holdings in one place with live prices
 - See your total portfolio value and gain/loss at a glance

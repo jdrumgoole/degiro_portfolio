@@ -79,7 +79,7 @@ def ensure_indices_exist(db: Session) -> tuple[int, int]:
     return indices_created, prices_fetched
 
 
-app = FastAPI(title="DEGIRO Portfolio", version="0.3.10")
+app = FastAPI(title="DEGIRO Portfolio", version="0.4.0")
 
 # Track server start time
 SERVER_START_TIME = datetime.now()
@@ -1400,6 +1400,25 @@ async def purge_database(db: Session = Depends(get_db)):
             status_code=500,
             content={"success": False, "message": f"Error purging database: {str(e)}"}
         )
+
+
+# ---------------------------------------------------------------------------
+# Shutdown support (used by desktop mode to stop the server gracefully)
+# ---------------------------------------------------------------------------
+import asyncio as _asyncio
+
+_shutdown_event: "_asyncio.Event | None" = None
+
+
+@app.post("/api/shutdown")
+async def shutdown():
+    """Shut down the server (used by desktop mode when the window closes)."""
+    import threading as _threading
+    if _shutdown_event is not None:
+        _shutdown_event.set()
+    else:
+        _threading.Timer(0.2, lambda: os._exit(0)).start()
+    return JSONResponse({"status": "shutting_down"})
 
 
 if __name__ == "__main__":
