@@ -79,94 +79,50 @@ class Config:
     # ========================================================================
     # Excel Column Mappings
     # ========================================================================
-    #
-    # DEGIRO Export Format Column Mappings
-    #
-    # These map logical column names to the actual column names in DEGIRO's
-    # Excel export format. If DEGIRO changes their export format, or if you
-    # want to support another broker, you only need to update these mappings.
-    #
-    # NOTE: Some DEGIRO columns have unusual names:
-    # - 'Price ' has a trailing space
-    # - 'Unnamed: 8' is the currency column
-    # - 'Unnamed: 17' is the transaction ID
-    #
-    # To support a different broker format, create a new mapping set below
-    # and switch ACTIVE_COLUMN_MAPPING to point to it.
-    # ========================================================================
 
+    # -------------------------------------------------------------------------
+    # DEGIRO exports always have 14 columns in this fixed order, regardless
+    # of the user's language setting.  We map by position so that English,
+    # Dutch, German, etc. exports all work without per-language mappings.
+    # -------------------------------------------------------------------------
+
+    # Canonical column names used internally (position -> canonical name)
+    DEGIRO_COLUMN_ORDER = [
+        'Date',                  # 0
+        'Time',                  # 1
+        'Product',               # 2
+        'ISIN',                  # 3
+        'Reference exchange',    # 4
+        'Quantity',              # 5
+        'Price',                 # 6
+        'Currency',              # 7
+        'Value EUR',             # 8
+        'Total EUR',             # 9
+        'Venue',                 # 10
+        'Exchange rate',         # 11
+        'Fees EUR',              # 12
+        'Transaction ID',        # 13
+    ]
+
+    DEGIRO_EXPECTED_COLUMN_COUNT = len(DEGIRO_COLUMN_ORDER)  # 14
+
+    # Logical key -> canonical column name mapping
     DEGIRO_COLUMNS = {
-        # Transaction identification
         'date': 'Date',
         'time': 'Time',
-        'transaction_id': 'Unnamed: 17',
-
-        # Stock information
+        'transaction_id': 'Transaction ID',
         'product': 'Product',
         'isin': 'ISIN',
         'exchange': 'Reference exchange',
-
-        # Transaction details
         'quantity': 'Quantity',
-        'price': 'Price ',  # NOTE: Trailing space in DEGIRO export!
-        'currency': 'Unnamed: 8',  # NOTE: Unnamed column in DEGIRO export
+        'price': 'Price',
+        'currency': 'Currency',
         'venue': 'Venue',
-
-        # Financial values (in EUR)
         'value_eur': 'Value EUR',
         'total_eur': 'Total EUR',
-        'fees_eur': 'Transaction and/or third party fees EUR',
+        'fees_eur': 'Fees EUR',
         'exchange_rate': 'Exchange rate',
     }
-
-    # Dutch DEGIRO export format
-    DEGIRO_COLUMNS_NL = {
-        # Transaction identification
-        'date': 'Datum',
-        'time': 'Tijd',
-        'transaction_id': 'Unnamed: 17',
-
-        # Stock information
-        'product': 'Product',
-        'isin': 'ISIN',
-        'exchange': 'Referentiebeurs',
-
-        # Transaction details
-        'quantity': 'Aantal',
-        'price': 'Koers',
-        'currency': 'Unnamed: 8',
-        'venue': 'Handelsplaats',
-
-        # Financial values (in EUR)
-        'value_eur': 'Waarde',
-        'total_eur': 'Totaal',
-        'fees_eur': 'Transactie- en/of derde kosten',
-        'exchange_rate': 'Wisselkoers',
-    }
-
-    # All known column mappings for auto-detection
-    KNOWN_COLUMN_MAPPINGS = {
-        'en': DEGIRO_COLUMNS,
-        'nl': DEGIRO_COLUMNS_NL,
-    }
-
-    # Example: Alternative broker format (uncomment and modify as needed)
-    # INTERACTIVE_BROKERS_COLUMNS = {
-    #     'date': 'Date',
-    #     'time': 'Time',
-    #     'transaction_id': 'Order ID',
-    #     'product': 'Symbol',
-    #     'isin': 'ISIN',
-    #     'exchange': 'Exchange',
-    #     'quantity': 'Quantity',
-    #     'price': 'Price',
-    #     'currency': 'Currency',
-    #     'venue': 'Venue',
-    #     'value_eur': 'Total (EUR)',
-    #     'total_eur': 'Net Total (EUR)',
-    #     'fees_eur': 'Commission (EUR)',
-    #     'exchange_rate': 'FX Rate',
-    # }
 
     # Set which column mapping to use
     ACTIVE_COLUMN_MAPPING = DEGIRO_COLUMNS
@@ -217,133 +173,52 @@ class Config:
 
         Returns:
             List of actual column names as they appear in the Excel file
-
-        Example:
-            >>> Config.get_required_excel_columns()
-            ['Date', 'Product', 'ISIN', 'Reference exchange', ...]
         """
         return [cls.get_column(key) for key in cls.REQUIRED_COLUMNS]
 
     @classmethod
-    def _normalize_columns(cls, columns: list) -> dict:
+    def normalize_degiro_columns(cls, df):
         """
-        Build a mapping from stripped column names to original column names.
+        Rename a DEGIRO DataFrame's columns to canonical names by position.
 
-        This handles DEGIRO exports where some columns have trailing spaces
-        (e.g., 'Price ' vs 'Price').
-
-        Returns:
-            Dict mapping stripped name -> original name
-        """
-        return {col.strip(): col for col in columns}
-
-    @classmethod
-    def detect_and_set_column_mapping(cls, df_columns: list) -> str | None:
-        """
-        Auto-detect the export language from DataFrame columns and set the
-        active column mapping accordingly.
+        DEGIRO exports always have 14 columns in a fixed order regardless
+        of language.  This renames them to canonical English names so the
+        rest of the code never needs to care about the original language.
 
         Args:
-            df_columns: List of column names from the DataFrame
+            df: pandas DataFrame read from a DEGIRO Excel export
 
         Returns:
-            Language code ('en', 'nl', etc.) if detected, None otherwise
+            DataFrame with canonical column names
+
+        Raises:
+            ValueError: if the DataFrame doesn't have the expected number
+                        of columns
         """
-        normalized = {col.strip() for col in df_columns}
-
-        best_lang = None
-        best_score = 0
-
-        for lang, mapping in cls.KNOWN_COLUMN_MAPPINGS.items():
-            expected = {v.strip() for v in mapping.values()}
-            score = len(expected & normalized)
-            if score > best_score:
-                best_score = score
-                best_lang = lang
-
-        if best_lang:
-            cls.ACTIVE_COLUMN_MAPPING = cls.KNOWN_COLUMN_MAPPINGS[best_lang]
-            return best_lang
-        return None
+        if len(df.columns) != cls.DEGIRO_EXPECTED_COLUMN_COUNT:
+            raise ValueError(
+                f"Expected {cls.DEGIRO_EXPECTED_COLUMN_COUNT} columns in "
+                f"DEGIRO export, got {len(df.columns)}.  "
+                f"Columns found: {list(df.columns)}"
+            )
+        df.columns = cls.DEGIRO_COLUMN_ORDER
+        return df
 
     @classmethod
     def validate_excel_columns(cls, df_columns: list) -> tuple[bool, list]:
         """
         Validate that a DataFrame has all required columns.
 
-        Handles trailing/leading whitespace in column names (e.g., DEGIRO's
-        'Price ' column). Also auto-detects the export language if the
-        default mapping doesn't match.
-
         Args:
             df_columns: List of column names from the DataFrame
 
         Returns:
             Tuple of (is_valid, missing_columns)
-
-        Example:
-            >>> valid, missing = Config.validate_excel_columns(df.columns.tolist())
-            >>> if not valid:
-            ...     print(f"Missing columns: {missing}")
         """
-        # First try auto-detecting the language
-        cls.detect_and_set_column_mapping(df_columns)
-
-        # Build normalized lookup: stripped name -> original name
-        normalized = cls._normalize_columns(df_columns)
-        present_stripped = set(normalized.keys())
-
-        # Check required columns, matching with stripped names
-        missing = []
-        for key in cls.REQUIRED_COLUMNS:
-            expected_col = cls.get_column(key)
-            if expected_col not in df_columns and expected_col.strip() not in present_stripped:
-                missing.append(expected_col)
-
+        required = set(cls.get_required_excel_columns())
+        present = set(df_columns)
+        missing = list(required - present)
         return (len(missing) == 0, missing)
-
-    @classmethod
-    def normalize_dataframe_columns(cls, df):
-        """
-        Rename DataFrame columns to match the active column mapping.
-
-        Handles trailing/leading whitespace mismatches (e.g., 'Price ' vs
-        'Price') by stripping whitespace and matching against expected names.
-
-        Args:
-            df: pandas DataFrame to normalize
-
-        Returns:
-            DataFrame with normalized column names
-        """
-        expected_cols = set(cls.ACTIVE_COLUMN_MAPPING.values())
-        rename_map = {}
-        for col in df.columns:
-            stripped = col.strip()
-            if col not in expected_cols and stripped != col:
-                # Check if the stripped version matches an expected column
-                for expected in expected_cols:
-                    if stripped == expected.strip() and expected != col:
-                        rename_map[col] = expected
-                        break
-        if rename_map:
-            df = df.rename(columns=rename_map)
-        return df
-
-    @classmethod
-    def get_column_mapping_name(cls) -> str:
-        """
-        Get the name of the active column mapping.
-
-        Returns:
-            Name of the active mapping (e.g., 'DEGIRO', 'INTERACTIVE_BROKERS')
-        """
-        if cls.ACTIVE_COLUMN_MAPPING == cls.DEGIRO_COLUMNS:
-            return 'DEGIRO'
-        if cls.ACTIVE_COLUMN_MAPPING == cls.DEGIRO_COLUMNS_NL:
-            return 'DEGIRO (NL)'
-        # Add more mappings here as they're created
-        return 'CUSTOM'
 
 
 # Convenience function for common use case

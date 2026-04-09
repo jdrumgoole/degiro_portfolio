@@ -14,11 +14,29 @@ except ImportError:
     from degiro_portfolio.fetch_prices import fetch_stock_prices
 
 
-def parse_date(date_str, time_str):
-    """Parse date and time strings into datetime object."""
-    # Format: DD-MM-YYYY and HH:MM
+def parse_date(date_val, time_str):
+    """Parse date and time values into a datetime object.
+
+    Handles multiple representations:
+      - pandas Timestamp (auto-parsed by read_excel)
+      - String in DD-MM-YYYY or DD/MM/YYYY format
+    """
+    if isinstance(date_val, datetime):
+        # pandas already parsed it; just attach the time
+        dt = date_val
+        if isinstance(time_str, str) and ":" in time_str:
+            parts = time_str.split(":")
+            dt = dt.replace(hour=int(parts[0]), minute=int(parts[1]))
+        return dt
+
+    date_str = str(date_val)
     datetime_str = f"{date_str} {time_str}"
-    return datetime.strptime(datetime_str, "%d-%m-%Y %H:%M")
+    for fmt in ("%d-%m-%Y %H:%M", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M"):
+        try:
+            return datetime.strptime(datetime_str, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f"Cannot parse date/time: {date_str!r} / {time_str!r}")
 
 
 def determine_native_currency(df, product):
@@ -97,18 +115,8 @@ def import_transactions(excel_file=None):
     print(f"Reading {excel_file}...")
     df = pd.read_excel(excel_file)
 
-    # Auto-detect language and normalize column names
-    lang = Config.detect_and_set_column_mapping(df.columns.tolist())
-    if lang:
-        print(f"Detected export language: {lang}")
-    df = Config.normalize_dataframe_columns(df)
-
-    # Validate required columns
-    is_valid, missing_columns = Config.validate_excel_columns(df.columns.tolist())
-    if not is_valid:
-        print(f"Missing required columns: {', '.join(missing_columns)}")
-        print(f"Available columns: {', '.join(df.columns.tolist())}")
-        raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
+    # Rename columns by position to canonical names (language-independent)
+    df = Config.normalize_degiro_columns(df)
 
     print(f"Found {len(df)} transactions\n")
 
