@@ -49,6 +49,8 @@ Transactions.xlsx
 *.xls
 # But include example data
 !example_data.xlsx
+# Test CSV data
+tests/degiro.csv
 
 # Testing
 .pytest_cache/

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-04-10
+
+### Changed
+- **Position-Based Column Mapping**: DEGIRO exports are now mapped by column position instead of column name, making imports work with any language (English, Dutch, German, etc.) without per-language mappings
+- **Simplified Config**: Removed language-detection machinery (`detect_and_set_column_mapping`, `normalize_dataframe_columns`, Dutch column mapping) in favour of a single `normalize_degiro_columns` method
+
+### Fixed
+- **Date Parsing**: `parse_date()` now handles pandas Timestamps (auto-parsed by `read_excel`), plus multiple string formats (DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD) instead of only DD-MM-YYYY
+- **Upload Endpoint**: Uses shared `parse_date()` and position-based column normalization, matching the CLI import behaviour
+- **Holdings API Crash**: Fixed `TypeError` in `/api/holdings` when `latest_price` is `None` (e.g. stocks with no historical price data)
+
+### Testing
+- **Updated Config Tests**: Rewrote `test_config_unit.py` to match new position-based API (10 tests, 144 total)
+
 ## [0.4.0] - 2026-04-09
 
 ### Added

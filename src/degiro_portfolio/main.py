@@ -262,7 +262,7 @@ async def get_holdings(db: Session = Depends(get_db)):
             price_currency = latest_price_record.currency
 
             prev_price_record = prev_price_by_stock.get(stock.id)
-            if prev_price_record and prev_price_record.close > 0:
+            if latest_price is not None and prev_price_record and prev_price_record.close and prev_price_record.close > 0:
                 price_change_pct = ((latest_price - prev_price_record.close) / prev_price_record.close) * 100
 
         holdings.append(StockInfo(

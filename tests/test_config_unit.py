@@ -1,141 +1,113 @@
-"""Unit tests for config.py — column mapping, language detection, whitespace handling.
+"""Unit tests for config.py — column mapping, normalization, validation.
 
-Regression tests for GitHub issue #1:
-- Dutch DEGIRO export: missing column errors
-- English export with trailing whitespace in column names (e.g., 'Price ')
-- Auto-detection of export language
+Tests for the position-based column mapping approach where DEGIRO exports
+are normalized to canonical column names regardless of language.
 """
 
 import pytest
+import pandas as pd
+
+from degiro_portfolio.config import Config
 
 
-def test_detect_english_columns():
-    """Test auto-detection of English DEGIRO export columns."""
-    from degiro_portfolio.config import Config
+def test_canonical_column_order_has_expected_count():
+    """DEGIRO exports have exactly 14 columns."""
+    assert Config.DEGIRO_EXPECTED_COLUMN_COUNT == 14
+    assert len(Config.DEGIRO_COLUMN_ORDER) == 14
 
+
+def test_get_column_returns_canonical_name():
+    """get_column maps logical keys to canonical column names."""
+    assert Config.get_column('date') == 'Date'
+    assert Config.get_column('price') == 'Price'
+    assert Config.get_column('quantity') == 'Quantity'
+    assert Config.get_column('currency') == 'Currency'
+    assert Config.get_column('isin') == 'ISIN'
+
+
+def test_get_column_returns_key_for_unknown():
+    """get_column returns the key itself if not found in mapping."""
+    assert Config.get_column('nonexistent') == 'nonexistent'
+
+
+def test_get_required_excel_columns():
+    """Required columns should map to canonical names."""
+    required = Config.get_required_excel_columns()
+    assert 'Date' in required
+    assert 'Product' in required
+    assert 'ISIN' in required
+    assert 'Price' in required
+    assert 'Currency' in required
+
+
+def test_normalize_degiro_columns_english():
+    """English DEGIRO export columns are renamed to canonical names by position."""
     english_columns = [
         'Date', 'Time', 'Product', 'ISIN', 'Reference exchange',
-        'Venue', 'Quantity', 'Price ', 'Unnamed: 8', 'Value EUR',
-        'Total EUR', 'Transaction and/or third party fees EUR',
-        'Exchange rate', 'Unnamed: 17'
+        'Quantity', 'Price ', 'Unnamed: 8', 'Value EUR',
+        'Total EUR', 'Venue', 'Exchange rate',
+        'Transaction and/or third party fees EUR', 'Unnamed: 17'
     ]
-    lang = Config.detect_and_set_column_mapping(english_columns)
-    assert lang == 'en'
+    df = pd.DataFrame([[''] * 14], columns=english_columns)
+    result = Config.normalize_degiro_columns(df)
+    assert list(result.columns) == Config.DEGIRO_COLUMN_ORDER
 
 
-def test_detect_dutch_columns():
-    """Regression: Dutch DEGIRO export must be auto-detected (issue #1)."""
-    from degiro_portfolio.config import Config
-
+def test_normalize_degiro_columns_dutch():
+    """Regression: Dutch DEGIRO export must be normalized to canonical names (issue #1)."""
     dutch_columns = [
         'Datum', 'Tijd', 'Product', 'ISIN', 'Referentiebeurs',
-        'Handelsplaats', 'Aantal', 'Koers', 'Unnamed: 8', 'Waarde',
-        'Totaal', 'Transactie- en/of derde kosten',
-        'Wisselkoers', 'Unnamed: 17'
+        'Aantal', 'Koers', 'Unnamed: 8', 'Waarde',
+        'Totaal', 'Handelsplaats', 'Wisselkoers',
+        'Transactie- en/of derde kosten', 'Unnamed: 17'
     ]
-    lang = Config.detect_and_set_column_mapping(dutch_columns)
-    assert lang == 'nl'
-
-    # After detection, get_column should return Dutch names
-    assert Config.get_column('date') == 'Datum'
-    assert Config.get_column('price') == 'Koers'
-    assert Config.get_column('quantity') == 'Aantal'
-
-    # Reset to English for other tests
-    Config.ACTIVE_COLUMN_MAPPING = Config.DEGIRO_COLUMNS
+    df = pd.DataFrame([[''] * 14], columns=dutch_columns)
+    result = Config.normalize_degiro_columns(df)
+    assert list(result.columns) == Config.DEGIRO_COLUMN_ORDER
+    assert result.columns[0] == 'Date'
+    assert result.columns[6] == 'Price'
+    assert result.columns[7] == 'Currency'
 
 
-def test_validate_english_columns_with_trailing_whitespace():
-    """Regression: 'Price ' with trailing space must pass validation (issue #1)."""
-    from degiro_portfolio.config import Config
+def test_normalize_degiro_columns_wrong_count_raises():
+    """DataFrame with wrong number of columns should raise ValueError."""
+    df = pd.DataFrame([[''] * 10], columns=[f'col{i}' for i in range(10)])
+    with pytest.raises(ValueError, match="Expected 14 columns"):
+        Config.normalize_degiro_columns(df)
 
-    # Reset to English mapping
-    Config.ACTIVE_COLUMN_MAPPING = Config.DEGIRO_COLUMNS
 
-    # Simulate DEGIRO export with trailing whitespace on some columns
-    columns_with_spaces = [
-        'Date', 'Time', 'Product', 'ISIN', 'Reference exchange',
-        'Venue', 'Quantity', 'Price ',  # trailing space — this is the real DEGIRO format
-        'Unnamed: 8', 'Value EUR', 'Total EUR',
-        'Transaction and/or third party fees EUR',
-        'Exchange rate', 'Unnamed: 17'
-    ]
-    is_valid, missing = Config.validate_excel_columns(columns_with_spaces)
+def test_validate_excel_columns_with_canonical_names():
+    """Validation passes when canonical column names are present."""
+    columns = Config.DEGIRO_COLUMN_ORDER
+    is_valid, missing = Config.validate_excel_columns(columns)
     assert is_valid, f"Validation failed, missing: {missing}"
     assert len(missing) == 0
 
 
-def test_validate_columns_without_trailing_whitespace():
-    """Regression: 'Price' without trailing space must also pass (issue #1)."""
-    from degiro_portfolio.config import Config
+def test_validate_excel_columns_missing_required():
+    """Validation fails when required columns are missing."""
+    columns = ['Date', 'Time', 'Product']  # missing many required
+    is_valid, missing = Config.validate_excel_columns(columns)
+    assert not is_valid
+    assert len(missing) > 0
+    assert 'ISIN' in missing
 
-    Config.ACTIVE_COLUMN_MAPPING = Config.DEGIRO_COLUMNS
 
-    # User has clean column names (no trailing whitespace)
-    clean_columns = [
+def test_validate_after_normalize():
+    """Regression: columns should pass validation after normalize_degiro_columns (issue #1).
+
+    This tests the full workflow: read DEGIRO export with any language columns,
+    normalize to canonical names, then validate.
+    """
+    # Simulate English export with trailing whitespace (real DEGIRO format)
+    messy_columns = [
         'Date', 'Time', 'Product', 'ISIN', 'Reference exchange',
-        'Venue', 'Quantity', 'Price',  # no trailing space
-        'Unnamed: 8', 'Value EUR', 'Total EUR',
-        'Transaction and/or third party fees EUR',
-        'Exchange rate', 'Unnamed: 17'
+        'Quantity', 'Price ', 'Unnamed: 8', 'Value EUR',
+        'Total EUR', 'Venue', 'Exchange rate',
+        'Transaction and/or third party fees EUR', 'Unnamed: 17'
     ]
-    is_valid, missing = Config.validate_excel_columns(clean_columns)
-    assert is_valid, f"Validation failed, missing: {missing}"
+    df = pd.DataFrame([[''] * 14], columns=messy_columns)
+    df = Config.normalize_degiro_columns(df)
 
-
-def test_normalize_dataframe_columns_strips_whitespace():
-    """Regression: DataFrame columns with trailing spaces must be normalized (issue #1)."""
-    import pandas as pd
-    from degiro_portfolio.config import Config
-
-    Config.ACTIVE_COLUMN_MAPPING = Config.DEGIRO_COLUMNS
-
-    # Create DataFrame with messy column names (trailing spaces)
-    df = pd.DataFrame({
-        'Date': ['01-01-2025'],
-        'Time ': ['10:00'],       # trailing space
-        'Product ': ['NVIDIA'],   # trailing space
-        'ISIN': ['US67066G1040'],
-        'Price': ['100.0'],       # no trailing space (DEGIRO expects 'Price ')
-    })
-
-    normalized = Config.normalize_dataframe_columns(df)
-
-    # 'Price' should be renamed to 'Price ' to match the expected DEGIRO format
-    assert 'Price ' in normalized.columns or 'Price' in normalized.columns
-
-
-def test_validate_dutch_columns():
-    """Test that Dutch column names pass validation after auto-detection."""
-    from degiro_portfolio.config import Config
-
-    dutch_columns = [
-        'Datum', 'Tijd', 'Product', 'ISIN', 'Referentiebeurs',
-        'Handelsplaats', 'Aantal', 'Koers', 'Unnamed: 8', 'Waarde',
-        'Totaal', 'Transactie- en/of derde kosten',
-        'Wisselkoers', 'Unnamed: 17'
-    ]
-
-    # Detect language first
-    Config.detect_and_set_column_mapping(dutch_columns)
-
-    # Then validate
-    is_valid, missing = Config.validate_excel_columns(dutch_columns)
-    assert is_valid, f"Dutch validation failed, missing: {missing}"
-
-    # Reset
-    Config.ACTIVE_COLUMN_MAPPING = Config.DEGIRO_COLUMNS
-
-
-def test_detect_unknown_columns_returns_none():
-    """Test that unrecognizable columns return None for language detection."""
-    from degiro_portfolio.config import Config
-
-    garbage_columns = ['foo', 'bar', 'baz']
-    lang = Config.detect_and_set_column_mapping(garbage_columns)
-    # Should still pick a "best" match or return None/a lang with low score
-    # The important thing is it doesn't crash
-    assert lang is None or isinstance(lang, str)
-
-    # Reset
-    Config.ACTIVE_COLUMN_MAPPING = Config.DEGIRO_COLUMNS
+    is_valid, missing = Config.validate_excel_columns(list(df.columns))
+    assert is_valid, f"Validation failed after normalize, missing: {missing}"
