@@ -19,6 +19,7 @@ maxdepth: 2
 caption: For Developers
 ---
 developer-appendix
+release-notes
 ```
 
 ## What Does This Application Do?

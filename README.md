@@ -2,6 +2,10 @@
 
 A desktop application that helps you track and visualize your DEGIRO investment portfolio with beautiful charts and performance metrics.
 
+[![Documentation](https://readthedocs.org/projects/degiro-portfolio/badge/?version=latest)](https://degiro-portfolio.readthedocs.io/en/latest/) [![PyPI](https://img.shields.io/pypi/v/degiro_portfolio)](https://pypi.org/project/degiro_portfolio/)
+
+**[Full Documentation](https://degiro-portfolio.readthedocs.io/)** | **[Release Notes](https://degiro-portfolio.readthedocs.io/en/latest/release-notes.html)**
+
 ![Portfolio Dashboard](https://raw.githubusercontent.com/jdrumgoole/degiro_portfolio/main/screenshots/portfolio-overview.png)
 *Your portfolio at a glance with live prices and performance charts*
 
@@ -48,9 +52,9 @@ The application opens in a native window. No browser needed - the server starts 
 
 ### 3. Upload Your Transactions
 
-1. Export your transactions from DEGIRO (Activity -> Transactions -> Export as Excel)
+1. Export your transactions from [DEGIRO](https://trader.degiro.nl/trader/#/transactions) (Transactions -> Export as CSV or Excel)
 2. Click **Upload Transactions** in the app
-3. Select your Excel file
+3. Select your file (.csv or .xlsx)
 
 The app automatically downloads stock prices and displays your portfolio.
 
@@ -79,14 +83,14 @@ degiro_portfolio status   # Check if running
 ### Uploading Transactions
 
 1. **Export from DEGIRO:**
-   - Log in to your DEGIRO account
-   - Go to Activity -> Transactions
-   - Export as Excel (.xlsx)
-   - Both English and Dutch exports are supported
+   - Log in at [trader.degiro.nl/trader/#/transactions](https://trader.degiro.nl/trader/#/transactions)
+   - Set your date range and click **Export**
+   - Choose CSV or Excel format
+   - All DEGIRO languages are supported (English, Dutch, German, etc.)
 
 2. **Upload to the Application:**
    - Click the **Upload Transactions** button
-   - Select your DEGIRO Excel file
+   - Select your DEGIRO file (.csv or .xlsx)
    - Wait for the upload to complete
 
 ### Updating Stock Prices
@@ -146,14 +150,14 @@ All your financial data stays on your computer:
 - Check your internet connection
 
 ### The upload fails
-- Make sure you're uploading a DEGIRO transaction export (.xlsx)
-- Both English and Dutch exports are supported
+- Make sure you're uploading a DEGIRO transaction export (.csv or .xlsx)
+- All DEGIRO languages are supported
 
 ## Getting Help
 
-If you encounter issues:
-1. Check the Troubleshooting section above
-2. Visit the [GitHub Issues](https://github.com/jdrumgoole/degiro_portfolio/issues) page
+- **[Full Documentation](https://degiro-portfolio.readthedocs.io/)** — installation, features, advanced setup
+- **[Release Notes](https://degiro-portfolio.readthedocs.io/en/latest/release-notes.html)** — what's new in each version
+- **[GitHub Issues](https://github.com/jdrumgoole/degiro_portfolio/issues)** — report bugs or request features
 
 ## License
 
