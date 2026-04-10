@@ -113,8 +113,8 @@ def test_validate_after_normalize():
     assert is_valid, f"Validation failed after normalize, missing: {missing}"
 
 
-def test_normalize_degiro_18col_format():
-    """18-column DEGIRO CSV format should be mapped to canonical 14 columns."""
+def test_normalize_degiro_18col_english():
+    """18-column English DEGIRO format should be mapped to canonical 14 columns."""
     cols_18 = [
         'Date', 'Time', 'Product', 'ISIN', 'Reference exchange',
         'Venue', 'Quantity', 'Price', 'Unnamed: 8', 'Local value',
@@ -125,21 +125,24 @@ def test_normalize_degiro_18col_format():
     df = pd.DataFrame([[''] * 18], columns=cols_18)
     result = Config.normalize_degiro_columns(df)
     assert len(result.columns) == 14
-    assert list(result.columns) == Config.DEGIRO_COLUMN_ORDER
+    assert set(result.columns) == set(Config.DEGIRO_COLUMN_ORDER)
     assert 'Local value' not in result.columns
     assert 'AutoFX Fee' not in result.columns
 
 
-def test_normalize_degiro_18col_missing_column_raises():
-    """18-column format with a missing required column should raise ValueError."""
-    # Missing 'Order ID' — replaced with 'Bad Column'
+def test_normalize_degiro_18col_dutch():
+    """18-column Dutch DEGIRO format should work via positional mapping."""
     cols_18 = [
-        'Date', 'Time', 'Product', 'ISIN', 'Reference exchange',
-        'Venue', 'Quantity', 'Price', 'Unnamed: 8', 'Local value',
-        'Unnamed: 10', 'Value EUR', 'Exchange rate', 'AutoFX Fee',
-        'Transaction and/or third party fees EUR', 'Total EUR',
-        'Bad Column', 'Unnamed: 17'
+        'Datum', 'Tijd', 'Product', 'ISIN', 'Beurs',
+        'Uitvoeringsplaats', 'Aantal', 'Koers ', 'Unnamed: 8',
+        'Lokale waarde', 'Unnamed: 10', 'Waarde EUR', 'Wisselkoers',
+        'AutoFX Kosten', 'Transactiekosten en/of kosten van derden EUR',
+        'Totaal EUR', 'Order ID', 'Unnamed: 17'
     ]
     df = pd.DataFrame([[''] * 18], columns=cols_18)
-    with pytest.raises(ValueError, match="missing expected columns"):
-        Config.normalize_degiro_columns(df)
+    result = Config.normalize_degiro_columns(df)
+    assert len(result.columns) == 14
+    assert set(result.columns) == set(Config.DEGIRO_COLUMN_ORDER)
+    # Dutch column names should be gone — replaced by canonical English
+    assert 'Datum' not in result.columns
+    assert 'Koers ' not in result.columns

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-04-10
+
+### Fixed
+- **Dutch DEGIRO Import**: 18-column format now uses positional mapping (like 14-column), so Dutch, German, and all other language exports work without requiring English column names
+- **Desktop App Crash**: Removed unsupported `icon` kwarg from `webview.create_window()`
+
+### Testing
+- **Dutch E2E Tests**: New test module uploads a Dutch 18-column Excel file and validates import, stock card display, chart loading, and no JS errors
+- **Desktop Unit Tests**: Verify `create_window()` only passes supported kwargs
+- **211 tests total**, stable across 3 consecutive parallel runs
+
 ## [0.5.3] - 2026-04-10
 
 ### Fixed

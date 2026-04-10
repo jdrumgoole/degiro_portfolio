@@ -106,24 +106,29 @@ class Config:
 
     DEGIRO_EXPECTED_COLUMN_COUNT = len(DEGIRO_COLUMN_ORDER)  # 14
 
-    # 18-column DEGIRO format mapping (column name → canonical name)
-    # Newer DEGIRO exports have extra columns: Venue at pos 5, Local value,
-    # AutoFX Fee, etc.  We map by name to extract the 14 canonical columns.
-    DEGIRO_18COL_NAME_MAP = {
-        'Date': 'Date',
-        'Time': 'Time',
-        'Product': 'Product',
-        'ISIN': 'ISIN',
-        'Reference exchange': 'Reference exchange',
-        'Quantity': 'Quantity',
-        'Price': 'Price',
-        'Unnamed: 8': 'Currency',
-        'Value EUR': 'Value EUR',
-        'Total EUR': 'Total EUR',
-        'Venue': 'Venue',
-        'Exchange rate': 'Exchange rate',
-        'Transaction and/or third party fees EUR': 'Fees EUR',
-        'Order ID': 'Transaction ID',
+    # 18-column DEGIRO format: positional mapping (language-independent)
+    # Newer DEGIRO exports have 18 columns in this fixed order regardless of
+    # language (English, Dutch, German, etc.).  We select 14 columns by
+    # position and rename them to canonical names.
+    # Positions: 0=Date, 1=Time, 2=Product, 3=ISIN, 4=Exchange, 5=Venue,
+    #   6=Quantity, 7=Price, 8=Currency, 9=LocalValue, 10=(empty),
+    #   11=ValueEUR, 12=ExchangeRate, 13=AutoFXFee, 14=Fees, 15=TotalEUR,
+    #   16=OrderID, 17=(empty)
+    DEGIRO_18COL_POSITIONS = {
+        0: 'Date',
+        1: 'Time',
+        2: 'Product',
+        3: 'ISIN',
+        4: 'Reference exchange',
+        5: 'Venue',
+        6: 'Quantity',
+        7: 'Price',
+        8: 'Currency',
+        11: 'Value EUR',
+        12: 'Exchange rate',
+        14: 'Fees EUR',
+        15: 'Total EUR',
+        16: 'Transaction ID',
     }
 
     # Logical key -> canonical column name mapping
@@ -231,24 +236,21 @@ class Config:
 
     @classmethod
     def _normalize_18col(cls, df):
-        """Map 18-column DEGIRO format to canonical 14 columns by name."""
-        col_list = list(df.columns)
-        rename = {}
-        selected = []
+        """Map 18-column DEGIRO format to canonical 14 columns by position.
 
-        for orig_name, canonical_name in cls.DEGIRO_18COL_NAME_MAP.items():
-            if orig_name in col_list:
-                rename[orig_name] = canonical_name
-                selected.append(orig_name)
+        Uses positional mapping so it works with any language (English, Dutch,
+        German, etc.) — column names don't matter, only positions.
+        """
+        cols = list(df.columns)
+        selected_cols = []
+        canonical_names = []
 
-        missing = set(cls.DEGIRO_18COL_NAME_MAP.keys()) - set(col_list)
-        if missing:
-            raise ValueError(
-                f"18-column DEGIRO export missing expected columns: {missing}. "
-                f"Columns found: {col_list}"
-            )
+        for pos in sorted(cls.DEGIRO_18COL_POSITIONS.keys()):
+            selected_cols.append(cols[pos])
+            canonical_names.append(cls.DEGIRO_18COL_POSITIONS[pos])
 
-        df = df[selected].rename(columns=rename)
+        df = df[selected_cols].copy()
+        df.columns = canonical_names
         return df
 
     @classmethod

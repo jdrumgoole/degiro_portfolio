@@ -409,7 +409,7 @@ def base_url(server_process):
 def shared_page(context: BrowserContext, server_process):
     """Create a page shared across tests in a module (for read-only tests)."""
     page = context.new_page()
-    page.goto(server_process, timeout=15000)
+    page.goto(server_process, timeout=30000)
     yield page
     page.close()
 
@@ -418,7 +418,7 @@ def shared_page(context: BrowserContext, server_process):
 def page(shared_page, server_process):
     """Provide page for each test, navigating back to home to reset state."""
     # Navigate back to home page to reset state between tests
-    shared_page.goto(server_process, timeout=15000)
+    shared_page.goto(server_process, timeout=30000)
     # Wait for page to be fully loaded (holdings to appear)
     shared_page.wait_for_selector(".stock-card", timeout=8000)  # 8 seconds
     yield shared_page

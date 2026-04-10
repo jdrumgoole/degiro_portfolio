@@ -47,8 +47,9 @@ stockchart.log
 Transactions.xlsx
 *.xlsx
 *.xls
-# But include example data
+# But include example and test data
 !example_data.xlsx
+!tests/degiro_dutch.xlsx
 # Test CSV data
 tests/degiro.csv
 
