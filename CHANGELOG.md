@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2026-04-10
+
+### Fixed
+- **Null Price JS Crash**: `formatPrice()` now guards against null values, preventing "null is not an object" errors when stocks have no price data yet
+- **Chart Rendering**: `renderStats()` and `renderChart()` filter null close values before rendering; show helpful message instead of crashing
+- **Portfolio Summary**: Current value calculation skips stocks with null prices instead of producing NaN
+- **Chart Data Query**: Server-side SQL now excludes price records with null close values
+
+### Changed
+- **Upload Performance**: Only fetches historical prices for currently held stocks (net qty > 0), skipping sold positions — much faster for large transaction files
+
+### Testing
+- **160 tests total**: 15 E2E Playwright tests for CSV import covering holdings, all API endpoints, chart rendering per stock, JS error detection, and error banner checking
+
 ## [0.4.3] - 2026-04-10
 
 ### Fixed
