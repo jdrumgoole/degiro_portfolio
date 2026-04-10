@@ -113,9 +113,12 @@ def import_transactions(excel_file=None):
     init_db()
 
     print(f"Reading {excel_file}...")
-    df = pd.read_excel(excel_file)
+    if str(excel_file).lower().endswith('.csv'):
+        df = pd.read_csv(excel_file)
+    else:
+        df = pd.read_excel(excel_file)
 
-    # Rename columns by position to canonical names (language-independent)
+    # Rename columns to canonical names (handles 14-col and 18-col formats)
     df = Config.normalize_degiro_columns(df)
 
     print(f"Found {len(df)} transactions\n")

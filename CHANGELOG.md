@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-04-10
+
+### Added
+- **CSV File Support**: Upload CSV exports (`.csv`) alongside Excel files (`.xlsx`, `.xls`) — both via UI and CLI import
+- **18-Column DEGIRO Format**: Supports the newer 18-column DEGIRO transaction export (maps by column name, drops extra columns like AutoFX Fee and Local value)
+- **DEGIRO Transactions Link**: App header and docs now link to [trader.degiro.nl/trader/#/transactions](https://trader.degiro.nl/trader/#/transactions) for easy export
+- **E2E CSV Import Test**: 6 Playwright tests validate CSV upload against displayed holdings (stock count, share counts, transaction counts, ignored stocks)
+
+### Fixed
+- **Upload Crash**: Fixed `NameError: name 'time_str' is not defined` in upload endpoint when creating transactions
+- **Docs**: Updated Getting Started with CSV support, DEGIRO export URL, and file format details
+
+### Testing
+- **151 tests total** (up from 144): 6 new E2E CSV import tests, 1 new 18-column config unit test
+
 ## [0.4.1] - 2026-04-10
 
 ### Changed

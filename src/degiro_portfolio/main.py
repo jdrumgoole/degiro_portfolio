@@ -835,21 +835,26 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
     """Upload and process a new transactions Excel file."""
     try:
         # Validate file type
-        if not file.filename.endswith(('.xlsx', '.xls')):
+        filename = file.filename.lower()
+        if not filename.endswith(('.xlsx', '.xls', '.csv')):
             return JSONResponse(
                 status_code=400,
-                content={"success": False, "message": "Please upload an Excel file (.xlsx or .xls)"}
+                content={"success": False, "message": "Please upload an Excel (.xlsx, .xls) or CSV (.csv) file"}
             )
 
         # Save uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+        suffix = '.csv' if filename.endswith('.csv') else '.xlsx'
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp_file:
             content = await file.read()
             tmp_file.write(content)
             tmp_file_path = tmp_file.name
 
         try:
-            # Read Excel file and rename columns by position
-            df = pd.read_excel(tmp_file_path)
+            # Read file and rename columns to canonical names
+            if suffix == '.csv':
+                df = pd.read_csv(tmp_file_path)
+            else:
+                df = pd.read_excel(tmp_file_path)
             try:
                 df = Config.normalize_degiro_columns(df)
             except ValueError as e:
@@ -914,7 +919,7 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
                     transaction = Transaction(
                         stock_id=stock.id,
                         date=trans_date,
-                        time=time_str,
+                        time=str(row[get_column('time')]),
                         quantity=int(row[get_column('quantity')]),
                         price=float(row[get_column('price')]),
                         currency=row[get_column('currency')],

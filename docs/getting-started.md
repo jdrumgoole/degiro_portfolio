@@ -64,16 +64,16 @@ You should now see the portfolio dashboard!
 
 #### Step 1: Export from DEGIRO
 
-1. Log in to your DEGIRO account
-2. Go to **Portfolio** → **Transactions**
+1. Log in to your DEGIRO account at [trader.degiro.nl](https://trader.degiro.nl/trader/#/transactions)
+2. Navigate to **Transactions** (or go directly to `https://trader.degiro.nl/trader/#/transactions`)
 3. Set your date range (e.g., "All time" or specific period)
-4. Click **Export** and select **Excel** format
-5. Save the file (typically named `Transactions.xlsx`)
+4. Click **Export** and choose **CSV** or **Excel** format
+5. Save the file (typically named `Transactions.csv` or `Transactions.xlsx`)
 
 #### Step 2: Upload to the Application
 
 1. Click the **📤 Upload Transactions** button in the top-right corner of the application
-2. Select your DEGIRO `Transactions.xlsx` file
+2. Select your DEGIRO transactions file (`.csv` or `.xlsx`)
 3. Click **Upload**
 
 The application will automatically:
@@ -138,22 +138,16 @@ Click any stock card to see:
 3. **Investment Tranches** - Performance of each individual purchase
 4. **Market Comparison** - How your stock compares to S&P 500 and Euro Stoxx 50
 
-## What File Format Is Supported?
+## What File Formats Are Supported?
 
-The application works with DEGIRO's standard Excel export format. Your export should include these columns:
-- Date - Transaction date
-- Time - Transaction time
-- Product - Stock name
-- ISIN - International stock identifier
-- Exchange - Which stock exchange
-- Quantity - Number of shares
-- Price - Price per share
-- Local value - Transaction value in stock's currency
-- Value (EUR) - Transaction value in EUR
-- Exchange rate - Currency conversion rate
-- Transaction and/or third - Transaction type and fees
+The application works with DEGIRO's transaction export in both **CSV** and **Excel** formats:
 
-**Don't worry about the format** - if you export from DEGIRO correctly, the format will be correct automatically.
+- **CSV** (`.csv`) — The standard export from [trader.degiro.nl/trader/#/transactions](https://trader.degiro.nl/trader/#/transactions). This is the 18-column format with all transaction details.
+- **Excel** (`.xlsx`, `.xls`) — Also exported from DEGIRO. Both 14-column and 18-column layouts are supported.
+
+Both formats are auto-detected — just export from DEGIRO and upload. The app handles column mapping automatically, regardless of your DEGIRO language setting (English, Dutch, German, etc.).
+
+**Don't worry about the format** — if you export from DEGIRO's Transactions page, the format will be correct automatically.
 
 ## Stock Prices
 
@@ -233,8 +227,8 @@ degiro_portfolio status    # Check if server is running
 **Problem**: Clicking upload does nothing or shows an error.
 
 **Solutions**:
-- Make sure you're uploading an Excel file (.xlsx)
-- Verify it's a DEGIRO transaction export (not portfolio or another report)
+- Make sure you're uploading an Excel file (.xlsx) or CSV file (.csv)
+- Verify it's a DEGIRO transaction export from [trader.degiro.nl/trader/#/transactions](https://trader.degiro.nl/trader/#/transactions) (not a portfolio or another report)
 - Check the file isn't corrupted - try opening it in Excel first
 - Look at the browser console (F12) for error messages
 - Make sure the file has the expected columns (Date, Product, ISIN, etc.)

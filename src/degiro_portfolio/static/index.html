@@ -722,7 +722,7 @@
                     <button class="upload-btn" onclick="updateMarketData()">
                         📈 Update Market Data
                     </button>
-                    <input type="file" id="file-input" accept=".xlsx,.xls" />
+                    <input type="file" id="file-input" accept=".xlsx,.xls,.csv" />
                     <button class="upload-btn" onclick="document.getElementById('file-input').click()">
                         📤 Upload Transactions
                     </button>
@@ -733,6 +733,7 @@
                 <div style="font-size: 11px; color: #718096; margin-top: -4px;">
                     <div id="market-data-status"></div>
                     <div id="live-prices-status" style="margin-top: 4px;"></div>
+                    <div style="margin-top: 4px;">Export transactions from <a href="https://trader.degiro.nl/trader/#/transactions" target="_blank" rel="noopener" style="color: #5a67d8;">DEGIRO Transactions</a> (CSV or Excel)</div>
                 </div>
             </div>
         </header>

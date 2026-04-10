@@ -106,6 +106,26 @@ class Config:
 
     DEGIRO_EXPECTED_COLUMN_COUNT = len(DEGIRO_COLUMN_ORDER)  # 14
 
+    # 18-column DEGIRO format mapping (column name → canonical name)
+    # Newer DEGIRO exports have extra columns: Venue at pos 5, Local value,
+    # AutoFX Fee, etc.  We map by name to extract the 14 canonical columns.
+    DEGIRO_18COL_NAME_MAP = {
+        'Date': 'Date',
+        'Time': 'Time',
+        'Product': 'Product',
+        'ISIN': 'ISIN',
+        'Reference exchange': 'Reference exchange',
+        'Quantity': 'Quantity',
+        'Price': 'Price',
+        'Unnamed: 8': 'Currency',
+        'Value EUR': 'Value EUR',
+        'Total EUR': 'Total EUR',
+        'Venue': 'Venue',
+        'Exchange rate': 'Exchange rate',
+        'Transaction and/or third party fees EUR': 'Fees EUR',
+        'Order ID': 'Transaction ID',
+    }
+
     # Logical key -> canonical column name mapping
     DEGIRO_COLUMNS = {
         'date': 'Date',
@@ -179,29 +199,56 @@ class Config:
     @classmethod
     def normalize_degiro_columns(cls, df):
         """
-        Rename a DEGIRO DataFrame's columns to canonical names by position.
+        Rename a DEGIRO DataFrame's columns to canonical names.
 
-        DEGIRO exports always have 14 columns in a fixed order regardless
-        of language.  This renames them to canonical English names so the
-        rest of the code never needs to care about the original language.
+        Supports two DEGIRO export formats:
+        - 14-column format: renamed by position (language-independent)
+        - 18-column format: mapped by column name, extra columns dropped
 
         Args:
-            df: pandas DataFrame read from a DEGIRO Excel export
+            df: pandas DataFrame read from a DEGIRO export
 
         Returns:
-            DataFrame with canonical column names
+            DataFrame with canonical column names (14 columns)
 
         Raises:
-            ValueError: if the DataFrame doesn't have the expected number
-                        of columns
+            ValueError: if the DataFrame has an unsupported number of columns
         """
-        if len(df.columns) != cls.DEGIRO_EXPECTED_COLUMN_COUNT:
+        ncols = len(df.columns)
+
+        if ncols == cls.DEGIRO_EXPECTED_COLUMN_COUNT:
+            df.columns = cls.DEGIRO_COLUMN_ORDER
+            return df
+
+        if ncols == 18:
+            return cls._normalize_18col(df)
+
+        raise ValueError(
+            f"Expected {cls.DEGIRO_EXPECTED_COLUMN_COUNT} or 18 columns in "
+            f"DEGIRO export, got {ncols}.  "
+            f"Columns found: {list(df.columns)}"
+        )
+
+    @classmethod
+    def _normalize_18col(cls, df):
+        """Map 18-column DEGIRO format to canonical 14 columns by name."""
+        col_list = list(df.columns)
+        rename = {}
+        selected = []
+
+        for orig_name, canonical_name in cls.DEGIRO_18COL_NAME_MAP.items():
+            if orig_name in col_list:
+                rename[orig_name] = canonical_name
+                selected.append(orig_name)
+
+        missing = set(cls.DEGIRO_18COL_NAME_MAP.keys()) - set(col_list)
+        if missing:
             raise ValueError(
-                f"Expected {cls.DEGIRO_EXPECTED_COLUMN_COUNT} columns in "
-                f"DEGIRO export, got {len(df.columns)}.  "
-                f"Columns found: {list(df.columns)}"
+                f"18-column DEGIRO export missing expected columns: {missing}. "
+                f"Columns found: {col_list}"
             )
-        df.columns = cls.DEGIRO_COLUMN_ORDER
+
+        df = df[selected].rename(columns=rename)
         return df
 
     @classmethod

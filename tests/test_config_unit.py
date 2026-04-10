@@ -72,7 +72,7 @@ def test_normalize_degiro_columns_dutch():
 def test_normalize_degiro_columns_wrong_count_raises():
     """DataFrame with wrong number of columns should raise ValueError."""
     df = pd.DataFrame([[''] * 10], columns=[f'col{i}' for i in range(10)])
-    with pytest.raises(ValueError, match="Expected 14 columns"):
+    with pytest.raises(ValueError, match="Expected 14 or 18 columns"):
         Config.normalize_degiro_columns(df)
 
 
@@ -111,3 +111,20 @@ def test_validate_after_normalize():
 
     is_valid, missing = Config.validate_excel_columns(list(df.columns))
     assert is_valid, f"Validation failed after normalize, missing: {missing}"
+
+
+def test_normalize_degiro_18col_format():
+    """18-column DEGIRO CSV format should be mapped to canonical 14 columns."""
+    cols_18 = [
+        'Date', 'Time', 'Product', 'ISIN', 'Reference exchange',
+        'Venue', 'Quantity', 'Price', 'Unnamed: 8', 'Local value',
+        'Unnamed: 10', 'Value EUR', 'Exchange rate', 'AutoFX Fee',
+        'Transaction and/or third party fees EUR', 'Total EUR',
+        'Order ID', 'Unnamed: 17'
+    ]
+    df = pd.DataFrame([[''] * 18], columns=cols_18)
+    result = Config.normalize_degiro_columns(df)
+    assert len(result.columns) == 14
+    assert list(result.columns) == Config.DEGIRO_COLUMN_ORDER
+    assert 'Local value' not in result.columns
+    assert 'AutoFX Fee' not in result.columns
