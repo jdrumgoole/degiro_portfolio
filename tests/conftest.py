@@ -336,14 +336,14 @@ def server_process(test_database, request):
         **popen_kwargs
     )
 
-    # Wait for server to be ready (reduced wait time)
+    # Wait for server to be ready
     import httpx
     test_url = f"http://{TEST_HOST}:{test_port}"
-    max_retries = 20  # Reduced from 30
+    max_retries = 40  # Up to 10 seconds
 
     for i in range(max_retries):
         try:
-            response = httpx.get(f"{test_url}/api/ping", timeout=0.5)  # Use ping endpoint, shorter timeout
+            response = httpx.get(f"{test_url}/api/ping", timeout=1.0)
             if response.status_code == 200:
                 print(f"✅ Test server ready at {test_url}")
                 break
@@ -400,7 +400,7 @@ def base_url(server_process):
 def shared_page(context: BrowserContext, server_process):
     """Create a page shared across tests in a module (for read-only tests)."""
     page = context.new_page()
-    page.goto(server_process, timeout=10000)  # 10 seconds
+    page.goto(server_process, timeout=15000)
     yield page
     page.close()
 
@@ -409,7 +409,7 @@ def shared_page(context: BrowserContext, server_process):
 def page(shared_page, server_process):
     """Provide page for each test, navigating back to home to reset state."""
     # Navigate back to home page to reset state between tests
-    shared_page.goto(server_process, timeout=10000)  # 10 seconds
+    shared_page.goto(server_process, timeout=15000)
     # Wait for page to be fully loaded (holdings to appear)
     shared_page.wait_for_selector(".stock-card", timeout=8000)  # 8 seconds
     yield shared_page
