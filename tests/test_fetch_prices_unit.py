@@ -251,3 +251,130 @@ def test_fetch_stock_prices_skips_duplicates(test_database):
             session.commit()
     finally:
         session.close()
+
+
+def test_fetch_stock_prices_no_ticker_returns_zero():
+    """fetch_stock_prices returns 0 when stock has no ticker."""
+    from degiro_portfolio.fetch_prices import fetch_stock_prices
+
+    mock_stock = MagicMock()
+    mock_stock.yahoo_ticker = None
+    mock_stock.name = "NO TICKER STOCK"
+    mock_stock.isin = "XX0000000000"
+
+    with patch('degiro_portfolio.fetch_prices.get_ticker_for_stock', return_value=None):
+        result = fetch_stock_prices(mock_stock, MagicMock())
+        assert result == 0
+
+
+def test_fetch_stock_prices_default_start_date_no_transactions():
+    """fetch_stock_prices defaults to 1-year lookback when no transactions exist."""
+    from degiro_portfolio.fetch_prices import fetch_stock_prices
+
+    mock_stock = MagicMock()
+    mock_stock.yahoo_ticker = "TEST"
+    mock_stock.name = "Test Stock"
+    mock_stock.isin = "US0000000000"
+    mock_stock.currency = "USD"
+    mock_stock.id = 99
+    mock_stock.data_provider = "yahoo"
+
+    mock_session = MagicMock()
+    # No transactions — func.min returns None
+    mock_session.query.return_value.filter_by.return_value.scalar.return_value = None
+
+    with patch('degiro_portfolio.fetch_prices.get_price_fetcher') as mock_fetcher, \
+         patch('degiro_portfolio.fetch_prices.get_ticker_for_stock', return_value="TEST"):
+        mock_instance = MagicMock()
+        mock_instance.fetch_prices.return_value = pd.DataFrame()
+        mock_fetcher.return_value = mock_instance
+
+        result = fetch_stock_prices(mock_stock, mock_session)
+
+        # Should have been called with a start date ~365 days ago
+        call_args = mock_instance.fetch_prices.call_args
+        start_date = call_args[0][1]
+        days_ago = (datetime.now() - start_date).days
+        assert 360 <= days_ago <= 370
+
+
+def test_fetch_stock_prices_yahoo_override():
+    """Stocks in YAHOO_FINANCE_OVERRIDE should always use Yahoo provider."""
+    from degiro_portfolio.fetch_prices import fetch_stock_prices, YAHOO_FINANCE_OVERRIDE
+
+    mock_stock = MagicMock()
+    mock_stock.yahoo_ticker = YAHOO_FINANCE_OVERRIDE[0]  # e.g., AIR.PA
+    mock_stock.name = "Override Stock"
+    mock_stock.isin = "XX0000000000"
+    mock_stock.currency = "EUR"
+    mock_stock.id = 99
+    mock_stock.data_provider = "yahoo"
+
+    mock_session = MagicMock()
+    mock_session.query.return_value.filter_by.return_value.scalar.return_value = datetime.now()
+
+    with patch('degiro_portfolio.fetch_prices.get_price_fetcher') as mock_fetcher, \
+         patch('degiro_portfolio.fetch_prices.get_ticker_for_stock', return_value=YAHOO_FINANCE_OVERRIDE[0]):
+        mock_instance = MagicMock()
+        mock_instance.fetch_prices.return_value = pd.DataFrame()
+        mock_fetcher.return_value = mock_instance
+
+        fetch_stock_prices(mock_stock, mock_session)
+
+        # Should have requested 'yahoo' provider specifically
+        mock_fetcher.assert_called_with('yahoo')
+
+
+def test_fetch_stock_prices_fallback_to_yahoo():
+    """When primary provider returns empty data, should fall back to Yahoo."""
+    from degiro_portfolio.fetch_prices import fetch_stock_prices
+    from degiro_portfolio.config import Config
+
+    mock_stock = MagicMock()
+    mock_stock.yahoo_ticker = "TEST"
+    mock_stock.name = "Test Stock"
+    mock_stock.isin = "US0000000000"
+    mock_stock.currency = "USD"
+    mock_stock.id = 99
+    mock_stock.data_provider = "fmp"
+
+    mock_session = MagicMock()
+    mock_session.query.return_value.filter_by.return_value.scalar.return_value = datetime.now()
+    mock_session.query.return_value.filter_by.return_value.first.return_value = None
+
+    original_provider = Config.PRICE_DATA_PROVIDER
+    Config.PRICE_DATA_PROVIDER = 'fmp'
+
+    try:
+        with patch('degiro_portfolio.fetch_prices.get_price_fetcher') as mock_fetcher, \
+             patch('degiro_portfolio.fetch_prices.get_ticker_for_stock', return_value="TEST"), \
+             patch('degiro_portfolio.price_fetchers.YahooFinanceFetcher') as mock_yahoo_class, \
+             patch('yfinance.Ticker') as mock_yf_ticker:
+
+            # Primary returns empty
+            mock_primary = MagicMock()
+            mock_primary.fetch_prices.return_value = pd.DataFrame()
+            mock_fetcher.return_value = mock_primary
+
+            # Yahoo fallback returns data
+            dates = pd.date_range(start='2024-01-01', periods=3, freq='D')
+            yahoo_df = pd.DataFrame({
+                'open': [100.0, 101.0, 102.0],
+                'high': [105.0, 106.0, 107.0],
+                'low': [99.0, 100.0, 101.0],
+                'close': [103.0, 104.0, 105.0],
+                'volume': [1000000, 1100000, 1200000]
+            }, index=dates)
+            mock_yahoo = MagicMock()
+            mock_yahoo.fetch_prices.return_value = yahoo_df
+            mock_yahoo_class.return_value = mock_yahoo
+
+            # Mock yfinance ticker info for currency detection
+            mock_ticker_obj = MagicMock()
+            mock_ticker_obj.info = {'currency': 'USD'}
+            mock_yf_ticker.return_value = mock_ticker_obj
+
+            result = fetch_stock_prices(mock_stock, mock_session)
+            assert result == 3  # 3 price records added
+    finally:
+        Config.PRICE_DATA_PROVIDER = original_provider

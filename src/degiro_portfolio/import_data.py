@@ -2,6 +2,7 @@
 import pandas as pd
 from datetime import datetime
 from collections import Counter
+from dateutil.parser import parse as dateutil_parse
 try:
     from .database import SessionLocal, init_db, Stock, Transaction, StockPrice
     from .ticker_resolver import get_ticker_for_stock
@@ -17,12 +18,14 @@ except ImportError:
 def parse_date(date_val, time_str):
     """Parse date and time values into a datetime object.
 
-    Handles multiple representations:
+    Uses dateutil for robust parsing of any date format.
+    DEGIRO exports use day-first format (DD-MM-YYYY), so dayfirst=True.
+
+    Handles:
       - pandas Timestamp (auto-parsed by read_excel)
-      - String in DD-MM-YYYY or DD/MM/YYYY format
+      - Any string date format (DD-MM-YYYY, DD/MM/YYYY, YYYY-MM-DD, etc.)
     """
     if isinstance(date_val, datetime):
-        # pandas already parsed it; just attach the time
         dt = date_val
         if isinstance(time_str, str) and ":" in time_str:
             parts = time_str.split(":")
@@ -31,12 +34,7 @@ def parse_date(date_val, time_str):
 
     date_str = str(date_val)
     datetime_str = f"{date_str} {time_str}"
-    for fmt in ("%d-%m-%Y %H:%M", "%d/%m/%Y %H:%M", "%Y-%m-%d %H:%M"):
-        try:
-            return datetime.strptime(datetime_str, fmt)
-        except ValueError:
-            continue
-    raise ValueError(f"Cannot parse date/time: {date_str!r} / {time_str!r}")
+    return dateutil_parse(datetime_str, dayfirst=True)
 
 
 def determine_native_currency(df, product):

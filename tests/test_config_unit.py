@@ -128,3 +128,18 @@ def test_normalize_degiro_18col_format():
     assert list(result.columns) == Config.DEGIRO_COLUMN_ORDER
     assert 'Local value' not in result.columns
     assert 'AutoFX Fee' not in result.columns
+
+
+def test_normalize_degiro_18col_missing_column_raises():
+    """18-column format with a missing required column should raise ValueError."""
+    # Missing 'Order ID' — replaced with 'Bad Column'
+    cols_18 = [
+        'Date', 'Time', 'Product', 'ISIN', 'Reference exchange',
+        'Venue', 'Quantity', 'Price', 'Unnamed: 8', 'Local value',
+        'Unnamed: 10', 'Value EUR', 'Exchange rate', 'AutoFX Fee',
+        'Transaction and/or third party fees EUR', 'Total EUR',
+        'Bad Column', 'Unnamed: 17'
+    ]
+    df = pd.DataFrame([[''] * 18], columns=cols_18)
+    with pytest.raises(ValueError, match="missing expected columns"):
+        Config.normalize_degiro_columns(df)

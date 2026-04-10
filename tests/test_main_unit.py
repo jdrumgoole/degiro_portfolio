@@ -323,6 +323,104 @@ def test_exchange_rates_endpoint(client, mocker):
     assert data["rates"]["EUR"] == 1.0
 
 
+def test_upload_transactions_invalid_file_type(client):
+    """Upload endpoint rejects non-Excel/CSV files."""
+    from io import BytesIO
+
+    response = client.post(
+        "/api/upload-transactions",
+        files={"file": ("test.txt", BytesIO(b"hello"), "text/plain")},
+    )
+    assert response.status_code == 400
+    assert "CSV" in response.json()["message"] or "Excel" in response.json()["message"]
+
+
+def test_upload_transactions_wrong_column_count(client):
+    """Upload endpoint rejects files with wrong column count."""
+    from io import BytesIO
+
+    csv_content = "col1,col2,col3\n1,2,3\n"
+    response = client.post(
+        "/api/upload-transactions",
+        files={"file": ("test.csv", BytesIO(csv_content.encode()), "text/csv")},
+    )
+    assert response.status_code == 400
+    assert "Expected" in response.json()["message"]
+
+
+def test_upload_ignored_stock_skipped(client, mocker):
+    """Stocks in IGNORED_STOCKS should be skipped during upload."""
+    from io import BytesIO
+    from degiro_portfolio.config import Config
+
+    mocker.patch('degiro_portfolio.main.fetch_stock_prices', return_value=0)
+    mocker.patch('degiro_portfolio.main.yahoo_rate_limiter.wait_if_needed')
+    mock_ticker = mocker.MagicMock()
+    mock_ticker.history.return_value = pd.DataFrame()
+    mocker.patch('degiro_portfolio.main.yf.Ticker', return_value=mock_ticker)
+
+    ignored_isin = list(Config.IGNORED_STOCKS)[0]
+    csv_content = (
+        "Date,Time,Product,ISIN,Reference exchange,Venue,Quantity,Price,,Local value,,Value EUR,Exchange rate,AutoFX Fee,Transaction and/or third party fees EUR,Total EUR,Order ID,\n"
+        f"20-03-2026,10:00,IGNORED STOCK,{ignored_isin},NASDAQ,XNAS,10,50.00,USD,500.00,USD,425.00,0.85,0.00,1.00,-426.00,,ignored-001\n"
+    )
+
+    response = client.post(
+        "/api/upload-transactions",
+        files={"file": ("test.csv", BytesIO(csv_content.encode()), "text/csv")},
+    )
+    assert response.json()["success"]
+    assert "0 new transactions" in response.json()["message"]
+
+
+def test_chart_data_with_valid_stock(client):
+    """Chart data for a valid stock should return all expected fields."""
+    response = client.get("/api/stock/1/chart-data")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "stock" in data
+    assert "prices" in data
+    assert "transactions" in data
+    assert "indices" in data
+    assert "stock_normalized" in data
+    assert "position_percentage" in data
+    assert data["stock"]["name"] is not None
+
+    # Verify no null close values in returned prices
+    for p in data["prices"]:
+        assert p["close"] is not None, f"Null close found on {p['date']}"
+
+
+def test_chart_data_transactions_have_running_position(client):
+    """Chart data transactions should include running share count."""
+    response = client.get("/api/stock/1/chart-data")
+    data = response.json()
+
+    if data["transactions"]:
+        t = data["transactions"][0]
+        assert "shares" in t
+        assert "transaction_type" in t
+        assert t["transaction_type"] in ("buy", "sell")
+
+
+
+def test_portfolio_summary_endpoint(client):
+    """Test the new portfolio-summary endpoint returns computed values."""
+    response = client.get("/api/portfolio-summary")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "total_holdings" in data
+    assert "net_invested" in data
+    assert "current_value" in data
+    assert "gain_loss" in data
+    assert "gain_loss_percent" in data
+    assert data["total_holdings"] > 0
+    assert isinstance(data["net_invested"], float)
+    assert isinstance(data["current_value"], float)
+
+
 def test_ping_uptime_formatting(client, mocker):
     """Test uptime string formatting for various durations."""
     # Test days format

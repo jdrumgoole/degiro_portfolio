@@ -202,3 +202,92 @@ def test_european_exchange_suffixes():
     # Stockholm should have .ST
     ticker = resolve_ticker_from_isin("SE0000108656", "SEK")
     assert ticker and ('.ST' in ticker or ticker == "ERIC-B.ST")
+
+
+def test_resolve_ticker_from_isin_default_when_no_currency():
+    """Manual mapping should return first available ticker when currency is None."""
+    from degiro_portfolio.ticker_resolver import resolve_ticker_from_isin
+
+    # NVIDIA is in manual mapping with USD key
+    ticker = resolve_ticker_from_isin("US67066G1040", None)
+    assert ticker == "NVDA"
+
+
+def test_resolve_ticker_from_isin_default_when_currency_not_in_mapping():
+    """Manual mapping should return first available ticker when currency doesn't match."""
+    from degiro_portfolio.ticker_resolver import resolve_ticker_from_isin
+
+    # SAP is mapped for EUR only — passing GBP should still return a ticker
+    ticker = resolve_ticker_from_isin("DE0007164600", "GBP")
+    assert ticker == "SAP.DE"
+
+
+def test_verify_ticker_with_isin_match():
+    """_verify_ticker should return True when ISIN matches."""
+    from degiro_portfolio.ticker_resolver import _verify_ticker
+    from unittest.mock import patch, MagicMock
+
+    with patch('yfinance.Ticker') as mock_class:
+        mock_ticker = MagicMock()
+        mock_ticker.info = {
+            'symbol': 'NVDA',
+            'isin': 'US67066G1040',
+            'regularMarketPrice': 150.0
+        }
+        mock_class.return_value = mock_ticker
+
+        assert _verify_ticker('NVDA', 'US67066G1040') is True
+
+
+def test_verify_ticker_isin_mismatch_but_has_price():
+    """_verify_ticker should return True if ISIN doesn't match but has market price."""
+    from degiro_portfolio.ticker_resolver import _verify_ticker
+    from unittest.mock import patch, MagicMock
+
+    with patch('yfinance.Ticker') as mock_class:
+        mock_ticker = MagicMock()
+        mock_ticker.info = {
+            'symbol': 'NVDA',
+            'isin': 'DIFFERENT_ISIN',
+            'regularMarketPrice': 150.0
+        }
+        mock_class.return_value = mock_ticker
+
+        assert _verify_ticker('NVDA', 'US67066G1040') is True
+
+
+def test_verify_ticker_no_isin_no_price():
+    """_verify_ticker should return False if no ISIN match and no price."""
+    from degiro_portfolio.ticker_resolver import _verify_ticker
+    from unittest.mock import patch, MagicMock
+
+    with patch('yfinance.Ticker') as mock_class:
+        mock_ticker = MagicMock()
+        mock_ticker.info = {'symbol': 'BAD'}
+        mock_class.return_value = mock_ticker
+
+        assert _verify_ticker('BAD', 'US0000000000') is False
+
+
+def test_resolve_ticker_from_name_strips_suffixes():
+    """resolve_ticker_from_name should strip CORP/INC from stock names."""
+    from degiro_portfolio.ticker_resolver import resolve_ticker_from_name
+    from unittest.mock import patch, MagicMock
+
+    with patch('degiro_portfolio.ticker_resolver._verify_ticker') as mock_verify:
+        mock_verify.return_value = True
+
+        result = resolve_ticker_from_name("NVIDIA CORP", "USD")
+        # Should try "NVIDIA" (with CORP stripped)
+        mock_verify.assert_called_with("NVIDIA")
+        assert result == "NVIDIA"
+
+
+def test_resolve_ticker_from_name_unresolvable():
+    """resolve_ticker_from_name should return None when verification fails."""
+    from degiro_portfolio.ticker_resolver import resolve_ticker_from_name
+    from unittest.mock import patch
+
+    with patch('degiro_portfolio.ticker_resolver._verify_ticker', return_value=False):
+        result = resolve_ticker_from_name("TOTALLY FAKE STOCK", "USD")
+        assert result is None

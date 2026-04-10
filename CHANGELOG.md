@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-04-10
+
+### Added
+- **Server-Side Portfolio Summary**: New `/api/portfolio-summary` endpoint computes net invested, current value, and gain/loss in a single query — replaces 2N client-side API calls
+- **Date Parsing with dateutil**: Replaced manual `strptime` format loop with `dateutil.parser.parse(dayfirst=True)` for robust parsing of any date format
+- **Test Coverage**: 205 tests total (up from 160), 73% code coverage (up from 31%). New tests for fetch_prices fallback logic, price_fetcher normalization, ticker resolver paths, import_data in-process, and main.py TestClient endpoints
+
+### Changed
+- **Faster UI Startup**: Exchange rates and holdings fetch in parallel; portfolio summary and valuation chart load in parallel; live price refresh is non-blocking
+- **Loading Status Feedback**: Status indicator shows "Loading holdings..." → "Loading charts..." → live prices update in background instead of a static "Loading portfolio data..." message
+
+### Fixed
+- **Startup Responsiveness**: Portfolio summary no longer blocks UI with sequential per-stock API calls
+
 ## [0.4.4] - 2026-04-10
 
 ### Fixed

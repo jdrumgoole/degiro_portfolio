@@ -248,3 +248,171 @@ def test_get_price_fetcher_with_invalid_provider():
     # Invalid provider should raise ValueError
     with pytest.raises(ValueError, match="Unknown price data provider"):
         get_price_fetcher('invalid_provider')
+
+
+def test_fmp_fetcher_missing_api_key_raises():
+    """FMPFetcher without API key should raise ValueError."""
+    from degiro_portfolio.price_fetchers import FMPFetcher
+    from degiro_portfolio.config import Config
+
+    original = Config.FMP_API_KEY
+    Config.FMP_API_KEY = ''
+    try:
+        with pytest.raises(ValueError, match="FMP API key required"):
+            FMPFetcher()
+    finally:
+        Config.FMP_API_KEY = original
+
+
+def test_fmp_fetcher_normalize_ticker_removes_exchange_suffix():
+    """FMPFetcher should strip European exchange suffixes."""
+    from degiro_portfolio.price_fetchers import FMPFetcher
+
+    with patch.object(FMPFetcher, '__init__', lambda self, api_key=None: None):
+        fetcher = FMPFetcher()
+        assert fetcher._normalize_ticker('SAP.DE') == 'SAP'
+        assert fetcher._normalize_ticker('ASML.AS') == 'ASML'
+        assert fetcher._normalize_ticker('AIR.PA') == 'AIR'
+        assert fetcher._normalize_ticker('LDO.MI') == 'LDO'
+        assert fetcher._normalize_ticker('RHM.DE') == 'RHM'
+
+
+def test_fmp_fetcher_normalize_ticker_special_mappings():
+    """FMPFetcher should apply special ADR/symbol mappings."""
+    from degiro_portfolio.price_fetchers import FMPFetcher
+
+    with patch.object(FMPFetcher, '__init__', lambda self, api_key=None: None):
+        fetcher = FMPFetcher()
+        assert fetcher._normalize_ticker('IFX.DE') == 'IFNNY'
+        assert fetcher._normalize_ticker('ERIC-B.ST') == 'ERIC'
+
+
+def test_fmp_fetcher_normalize_ticker_strips_share_class():
+    """FMPFetcher should strip share class suffixes like -A, -B, -C."""
+    from degiro_portfolio.price_fetchers import FMPFetcher
+
+    with patch.object(FMPFetcher, '__init__', lambda self, api_key=None: None):
+        fetcher = FMPFetcher()
+        assert fetcher._normalize_ticker('SAAB-B.ST') == 'SAAB'
+        assert fetcher._normalize_ticker('NVDA') == 'NVDA'
+
+
+def test_fmp_fetcher_fetch_prices_empty_response():
+    """FMPFetcher.fetch_prices should return empty DataFrame for empty API response."""
+    from degiro_portfolio.price_fetchers import FMPFetcher
+
+    with patch.object(FMPFetcher, '__init__', lambda self, api_key=None: None):
+        fetcher = FMPFetcher()
+        fetcher.session = MagicMock()
+        mock_resp = MagicMock()
+        mock_resp.json.return_value = []
+        mock_resp.raise_for_status = MagicMock()
+        fetcher.session.get.return_value = mock_resp
+        fetcher.base_url = "https://test.com"
+
+        result = fetcher.fetch_prices("AAPL", datetime.now(), datetime.now())
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 0
+
+
+def test_fmp_fetcher_fetch_prices_exception():
+    """FMPFetcher.fetch_prices should return empty DataFrame on exception."""
+    from degiro_portfolio.price_fetchers import FMPFetcher
+
+    with patch.object(FMPFetcher, '__init__', lambda self, api_key=None: None):
+        fetcher = FMPFetcher()
+        fetcher.session = MagicMock()
+        fetcher.session.get.side_effect = Exception("Connection error")
+        fetcher.base_url = "https://test.com"
+
+        result = fetcher.fetch_prices("AAPL", datetime.now(), datetime.now())
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 0
+
+
+def test_fmp_fetcher_fetch_latest_quote_exception():
+    """FMPFetcher.fetch_latest_quote should return None on exception."""
+    from degiro_portfolio.price_fetchers import FMPFetcher
+
+    with patch.object(FMPFetcher, '__init__', lambda self, api_key=None: None):
+        fetcher = FMPFetcher()
+        fetcher.session = MagicMock()
+        fetcher.session.get.side_effect = Exception("Timeout")
+        fetcher.base_url = "https://test.com"
+
+        result = fetcher.fetch_latest_quote("AAPL")
+        assert result is None
+
+
+def test_twelvedata_fetcher_error_plan_limitation():
+    """TwelveDataFetcher should handle plan limitation errors gracefully."""
+    from degiro_portfolio.price_fetchers import TwelveDataFetcher
+
+    with patch.object(TwelveDataFetcher, '__init__', lambda self, api_key=None: None):
+        fetcher = TwelveDataFetcher()
+        mock_client = MagicMock()
+        mock_client.time_series.side_effect = Exception("available starting with Pro plan")
+        fetcher.client = mock_client
+
+        result = fetcher.fetch_prices("AAPL", datetime.now(), datetime.now())
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 0
+
+
+def test_twelvedata_fetcher_error_invalid_symbol():
+    """TwelveDataFetcher should handle invalid symbol errors gracefully."""
+    from degiro_portfolio.price_fetchers import TwelveDataFetcher
+
+    with patch.object(TwelveDataFetcher, '__init__', lambda self, api_key=None: None):
+        fetcher = TwelveDataFetcher()
+        mock_client = MagicMock()
+        mock_client.time_series.side_effect = Exception("symbol is invalid")
+        fetcher.client = mock_client
+
+        result = fetcher.fetch_prices("BADTICK", datetime.now(), datetime.now())
+        assert isinstance(result, pd.DataFrame)
+        assert len(result) == 0
+
+
+def test_twelvedata_normalize_ticker_generic_exchange_suffix():
+    """TwelveDataFetcher should handle generic exchange suffixes with hyphen-to-dot."""
+    from degiro_portfolio.price_fetchers import TwelveDataFetcher
+    from degiro_portfolio.config import Config
+
+    original_key = Config.TWELVEDATA_API_KEY
+    Config.TWELVEDATA_API_KEY = 'test_key'
+    try:
+        fetcher = TwelveDataFetcher()
+        # Generic suffix removal with hyphen conversion
+        assert fetcher._normalize_ticker('XYZ-A.HE') == 'XYZ.A'
+        assert fetcher._normalize_ticker('ABC.L') == 'ABC'
+        # US stock — no change
+        assert fetcher._normalize_ticker('MSFT') == 'MSFT'
+    finally:
+        Config.TWELVEDATA_API_KEY = original_key
+
+
+def test_yahoo_rate_limiter_singleton():
+    """YahooRateLimiter should be a singleton."""
+    from degiro_portfolio.price_fetchers import YahooRateLimiter
+    a = YahooRateLimiter()
+    b = YahooRateLimiter()
+    assert a is b
+
+
+def test_yahoo_fetcher_rate_limit_detection():
+    """YahooFinanceFetcher should trigger rate limit cooldown on rate limit error."""
+    from degiro_portfolio.price_fetchers import YahooFinanceFetcher, yahoo_rate_limiter
+
+    with patch('yfinance.Ticker') as mock_ticker_class:
+        mock_ticker = MagicMock()
+        mock_ticker.history.side_effect = Exception("Too many requests")
+        mock_ticker_class.return_value = mock_ticker
+
+        fetcher = YahooFinanceFetcher()
+
+        with pytest.raises(Exception, match="Too many requests"):
+            fetcher.fetch_prices("AAPL", datetime.now(), datetime.now())
+
+        # Cooldown should have been triggered
+        assert yahoo_rate_limiter.cooldown_until > 0

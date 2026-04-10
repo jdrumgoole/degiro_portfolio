@@ -7,6 +7,7 @@ from sqlalchemy import func
 from typing import List
 from datetime import datetime
 from collections import Counter
+from dateutil.parser import parse as dateutil_parse
 import json
 import os
 import pandas as pd
@@ -611,6 +612,88 @@ async def get_chart_data(stock_id: int, db: Session = Depends(get_db)):
     }
 
 
+@app.get("/api/portfolio-summary")
+async def get_portfolio_summary(db: Session = Depends(get_db)):
+    """Compute portfolio summary in a single server-side call.
+
+    Returns total holdings count, net invested, current value, and gain/loss.
+    Replaces the expensive client-side loop that made 2 API calls per stock.
+    """
+    # Get held stocks with share counts
+    holdings_query = db.query(
+        Stock,
+        func.sum(Transaction.quantity).label('total_qty')
+    ).join(Transaction, Stock.id == Transaction.stock_id).group_by(
+        Stock.id
+    ).having(func.sum(Transaction.quantity) > 0).all()
+
+    if not holdings_query:
+        return {
+            "total_holdings": 0,
+            "net_invested": 0.0,
+            "current_value": 0.0,
+            "gain_loss": 0.0,
+            "gain_loss_percent": 0.0,
+        }
+
+    stock_ids = [stock.id for stock, _ in holdings_query]
+    shares_by_id = {stock.id: int(qty) for stock, qty in holdings_query}
+
+    # Compute net invested per stock: sum(|total_eur|) for buys - sum(|total_eur|) for sells
+    total_net_invested = 0.0
+    for stock_id in stock_ids:
+        transactions = db.query(Transaction).filter_by(stock_id=stock_id).all()
+        buys = sum(abs(t.total_eur) for t in transactions if t.quantity > 0)
+        sells = sum(abs(t.total_eur) for t in transactions if t.quantity < 0)
+        total_net_invested += buys - sells
+
+    # Get latest price per stock
+    latest_date_subq = db.query(
+        StockPrice.stock_id,
+        func.max(StockPrice.date).label('max_date')
+    ).filter(
+        StockPrice.stock_id.in_(stock_ids),
+        StockPrice.close.isnot(None)
+    ).group_by(StockPrice.stock_id).subquery()
+
+    from sqlalchemy import and_
+    latest_prices = db.query(StockPrice).join(
+        latest_date_subq,
+        and_(
+            StockPrice.stock_id == latest_date_subq.c.stock_id,
+            StockPrice.date == latest_date_subq.c.max_date
+        )
+    ).all()
+    price_by_stock = {p.stock_id: p for p in latest_prices}
+
+    # Get exchange rates for currency conversion
+    exchange_rates_map = {"EUR": 1.0}
+    rates = db.query(ExchangeRate).all()
+    for r in rates:
+        exchange_rates_map[r.from_currency] = r.rate
+
+    # Compute current value
+    current_value = 0.0
+    for stock, qty in holdings_query:
+        price_record = price_by_stock.get(stock.id)
+        if price_record and price_record.close:
+            currency = price_record.currency or stock.currency
+            rate = exchange_rates_map.get(currency, _get_fallback_rate(currency))
+            price_eur = price_record.close * rate
+            current_value += int(qty) * price_eur
+
+    gain_loss = current_value - total_net_invested
+    gain_loss_percent = (gain_loss / total_net_invested * 100) if total_net_invested > 0 else 0.0
+
+    return {
+        "total_holdings": len(holdings_query),
+        "net_invested": round(total_net_invested, 2),
+        "current_value": round(current_value, 2),
+        "gain_loss": round(gain_loss, 2),
+        "gain_loss_percent": round(gain_loss_percent, 2),
+    }
+
+
 @app.get("/api/portfolio-performance")
 async def get_portfolio_performance(db: Session = Depends(get_db)):
     """Get percentage return performance for all currently held stocks.
@@ -988,7 +1071,7 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
                         quote = fetcher.fetch_latest_quote(stock.yahoo_ticker)
                         if quote and quote.get('price'):
                             # Update or insert latest price in database
-                            quote_date = datetime.strptime(quote['timestamp'], '%Y-%m-%d') if isinstance(quote['timestamp'], str) else quote['timestamp']
+                            quote_date = dateutil_parse(quote['timestamp']) if isinstance(quote['timestamp'], str) else quote['timestamp']
 
                             # Check if we already have this date
                             existing = db.query(StockPrice).filter_by(
