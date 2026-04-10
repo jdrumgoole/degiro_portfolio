@@ -20,7 +20,6 @@ from pathlib import Path
 from playwright.sync_api import Browser, BrowserContext
 
 from degiro_portfolio.config import Config
-from degiro_portfolio.database import init_db, reinitialize_engine
 
 IS_WINDOWS = platform.system() == "Windows"
 CSV_PATH = Path(__file__).parent / "degiro.csv"
@@ -82,11 +81,12 @@ def csv_server():
     db_path = tmp_db.name
     db_url = f"sqlite:///{os.path.abspath(db_path)}"
 
-    # Initialize empty schema
-    orig_url = os.environ.get("DATABASE_URL")
-    os.environ["DATABASE_URL"] = db_url
-    reinitialize_engine()
-    init_db()
+    # Initialize empty schema using a separate engine (don't touch shared env)
+    from sqlalchemy import create_engine
+    from degiro_portfolio.database import Base
+    engine = create_engine(db_url, connect_args={"check_same_thread": False})
+    Base.metadata.create_all(engine)
+    engine.dispose()
 
     # Check port is free
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -144,13 +144,6 @@ def csv_server():
 
     _kill_process_tree(process)
     time.sleep(0.5)
-
-    # Restore original DATABASE_URL
-    if orig_url is not None:
-        os.environ["DATABASE_URL"] = orig_url
-    else:
-        os.environ.pop("DATABASE_URL", None)
-    reinitialize_engine()
 
     try:
         os.unlink(db_path)

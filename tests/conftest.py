@@ -353,6 +353,15 @@ def server_process(test_database, request):
                 raise Exception(f"Test server failed to start on port {test_port}")
             time.sleep(0.25)
 
+    # Double-check server is still alive before yielding
+    try:
+        final_check = httpx.get(f"{test_url}/api/ping", timeout=2.0)
+        if final_check.status_code != 200:
+            raise Exception(f"Server on port {test_port} returned {final_check.status_code}")
+    except Exception as e:
+        _kill_process_tree(process)
+        raise Exception(f"Server on port {test_port} not responding after startup: {e}")
+
     yield test_url
 
     # Cleanup
