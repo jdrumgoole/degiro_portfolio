@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-04-10
+
+### Fixed
+- **Chart Data Crash**: Fixed `TypeError: NoneType` in chart-data, index normalization, position value, and portfolio performance endpoints when price records have null close values
+- **Upload Stalling**: Upload now only fetches historical prices for currently held stocks (net qty > 0), not every stock that appears in any transaction — dramatically faster for large transaction files with many sold positions
+
+### Testing
+- **157 tests total** (up from 151): 6 new E2E API tests for chart-data, transactions, portfolio-performance, valuation-history, market-data-status, and stock-prices endpoints against CSV import data
+
 ## [0.4.2] - 2026-04-10
 
 ### Added

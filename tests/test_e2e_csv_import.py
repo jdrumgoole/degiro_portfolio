@@ -260,3 +260,68 @@ def test_csv_upload_holdings_api_matches(csv_page, csv_server):
             f"{h['name']}: expected {expected['transactions']} txns, "
             f"got {h['transactions_count']}"
         )
+
+
+def test_csv_upload_chart_data_loads_for_each_stock(csv_server):
+    """The /api/stock/<id>/chart-data endpoint should return valid data for each held stock."""
+    holdings_resp = httpx.get(f"{csv_server}/api/holdings")
+    assert holdings_resp.status_code == 200
+    holdings = holdings_resp.json()["holdings"]
+
+    for h in holdings:
+        resp = httpx.get(f"{csv_server}/api/stock/{h['id']}/chart-data")
+        assert resp.status_code == 200, (
+            f"Chart data failed for {h['name']} (id={h['id']}): {resp.text}"
+        )
+        data = resp.json()
+        # Should have transactions (we know all held stocks have transactions)
+        assert "transactions" in data, f"No transactions key for {h['name']}"
+        assert len(data["transactions"]) > 0, f"No transactions for {h['name']}"
+
+
+def test_csv_upload_stock_transactions_api(csv_server):
+    """The /api/stock/<id>/transactions endpoint should return correct transaction data."""
+    holdings_resp = httpx.get(f"{csv_server}/api/holdings")
+    holdings = holdings_resp.json()["holdings"]
+
+    for h in holdings:
+        resp = httpx.get(f"{csv_server}/api/stock/{h['id']}/transactions")
+        assert resp.status_code == 200, (
+            f"Transactions API failed for {h['name']}: {resp.text}"
+        )
+        data = resp.json()
+        expected = EXPECTED_HOLDINGS[h["name"]]
+        assert len(data["transactions"]) == expected["transactions"], (
+            f"{h['name']}: API returned {len(data['transactions'])} transactions, "
+            f"expected {expected['transactions']}"
+        )
+
+
+def test_csv_upload_portfolio_performance_api(csv_server):
+    """The /api/portfolio-performance endpoint should not error."""
+    resp = httpx.get(f"{csv_server}/api/portfolio-performance")
+    assert resp.status_code == 200, f"Portfolio performance failed: {resp.text}"
+
+
+def test_csv_upload_portfolio_valuation_history_api(csv_server):
+    """The /api/portfolio-valuation-history endpoint should not error."""
+    resp = httpx.get(f"{csv_server}/api/portfolio-valuation-history")
+    assert resp.status_code == 200, f"Valuation history failed: {resp.text}"
+
+
+def test_csv_upload_market_data_status_api(csv_server):
+    """The /api/market-data-status endpoint should not error."""
+    resp = httpx.get(f"{csv_server}/api/market-data-status")
+    assert resp.status_code == 200, f"Market data status failed: {resp.text}"
+
+
+def test_csv_upload_stock_prices_api(csv_server):
+    """The /api/stock/<id>/prices endpoint should return data for held stocks."""
+    holdings_resp = httpx.get(f"{csv_server}/api/holdings")
+    holdings = holdings_resp.json()["holdings"]
+
+    for h in holdings:
+        resp = httpx.get(f"{csv_server}/api/stock/{h['id']}/prices")
+        assert resp.status_code == 200, (
+            f"Prices API failed for {h['name']}: {resp.text}"
+        )

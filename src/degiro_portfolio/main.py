@@ -486,14 +486,18 @@ async def get_chart_data(stock_id: int, db: Session = Depends(get_db)):
 
             if index_prices:
                 # Normalize to percentage change from first price
-                base_price = index_prices[0].close
-                normalized = [
-                    {
-                        "date": ip.date.strftime("%Y-%m-%d"),
-                        "normalized": ((ip.close - base_price) / base_price) * 100
-                    }
-                    for ip in index_prices
-                ]
+                valid_idx_prices = [ip for ip in index_prices if ip.close is not None]
+                base_price = valid_idx_prices[0].close if valid_idx_prices else None
+                if base_price and base_price > 0:
+                    normalized = [
+                        {
+                            "date": ip.date.strftime("%Y-%m-%d"),
+                            "normalized": ((ip.close - base_price) / base_price) * 100
+                        }
+                        for ip in valid_idx_prices
+                    ]
+                else:
+                    normalized = []
 
                 indices_data.append({
                     "name": index.name,
@@ -502,14 +506,15 @@ async def get_chart_data(stock_id: int, db: Session = Depends(get_db)):
                 })
 
         # Also normalize stock prices for comparison
-        if prices:
-            base_stock_price = prices[0].close
+        valid_prices = [p for p in prices if p.close is not None]
+        if valid_prices and valid_prices[0].close:
+            base_stock_price = valid_prices[0].close
             stock_normalized = [
                 {
                     "date": p.date.strftime("%Y-%m-%d"),
                     "normalized": ((p.close - base_stock_price) / base_stock_price) * 100
                 }
-                for p in prices
+                for p in valid_prices
             ]
         else:
             stock_normalized = []
@@ -550,7 +555,7 @@ async def get_chart_data(stock_id: int, db: Session = Depends(get_db)):
                 trans_idx += 1
 
             # Calculate current value with proper currency conversion
-            if net_invested > 0 and cumulative_shares > 0:
+            if net_invested > 0 and cumulative_shares > 0 and price.close is not None:
                 # Convert price to EUR using actual exchange currency
                 if price.currency == 'EUR':
                     price_eur = price.close
@@ -660,6 +665,8 @@ async def get_portfolio_performance(db: Session = Depends(get_db)):
         # Calculate percentage return for each date
         performance = []
         for price in prices:
+            if price.close is None:
+                continue
             # Return = (current_price - avg_cost) / avg_cost * 100
             percent_return = ((price.close - avg_cost_per_share) / avg_cost_per_share) * 100
             performance.append({
@@ -935,17 +942,25 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
 
             db.commit()
 
-            # After successful import, fetch historical prices for NEW stocks and update latest prices
+            # After successful import, fetch historical prices only for HELD stocks
             total_prices = 0
             stocks_with_prices = 0
 
             if stocks_to_fetch_prices:
-                print(f"\n📈 Fetching prices for {len(stocks_to_fetch_prices)} stocks...")
-
+                # Filter to only currently held stocks (net quantity > 0)
+                held_stock_ids = set()
                 for stock_id in stocks_to_fetch_prices:
+                    total_qty = db.query(func.sum(Transaction.quantity)).filter_by(
+                        stock_id=stock_id
+                    ).scalar() or 0
+                    if total_qty > 0:
+                        held_stock_ids.add(stock_id)
+
+                print(f"\n📈 Fetching prices for {len(held_stock_ids)} held stocks (skipping {len(stocks_to_fetch_prices) - len(held_stock_ids)} sold positions)...")
+
+                for stock_id in held_stock_ids:
                     stock = db.query(Stock).filter_by(id=stock_id).first()
                     if stock:
-                        # Fetch historical prices if we haven't already fetched for this stock
                         existing_prices = db.query(StockPrice).filter_by(stock_id=stock.id).count()
                         if existing_prices == 0:
                             price_count = fetch_stock_prices(stock, db)
