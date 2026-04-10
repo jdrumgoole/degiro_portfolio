@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-04-10
+
+### Changed
+- **Clean Console Output**: Replaced all `print()` diagnostic messages with Python `logging` across fetch_prices.py, price_fetchers.py, fetch_indices.py, import_data.py, and main.py. Users now see a clean console by default — debug details only appear when logging is set to DEBUG level
+
 ## [0.5.0] - 2026-04-10
 
 ### Added

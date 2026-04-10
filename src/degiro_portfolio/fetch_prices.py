@@ -1,7 +1,10 @@
 """Fetch historical stock price data for current holdings."""
+import logging
 import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
+
+logger = logging.getLogger(__name__)
 try:
     from .database import SessionLocal, Stock, StockPrice, Transaction
     from .config import Config
@@ -35,7 +38,7 @@ def get_ticker_for_stock(stock):
         return stock.yahoo_ticker
 
     # If no ticker stored, try to resolve it now
-    print(f"  ⚠️  No ticker found for {stock.name} ({stock.isin}), attempting to resolve...")
+    logger.debug("No ticker found for %s (%s), attempting to resolve...", stock.name, stock.isin)
 
     try:
         from .ticker_resolver import get_ticker_for_stock as resolve_ticker
@@ -47,12 +50,10 @@ def get_ticker_for_stock(stock):
     if ticker:
         # Store the resolved ticker in the database for future use
         stock.yahoo_ticker = ticker
-        print(f"  ✓ Resolved and stored ticker: {ticker}")
+        logger.debug("Resolved and stored ticker: %s", ticker)
         return ticker
     else:
-        print(f"  ✗ Could not resolve ticker for {stock.name}")
-        print(f"     You may need to manually add the ticker to the database or")
-        print(f"     add a manual mapping in src/degiro_portfolio/ticker_resolver.py")
+        logger.warning("Could not resolve ticker for %s (ISIN: %s)", stock.name, stock.isin)
         return None
 
 def fetch_stock_prices(stock, session, start_date=None, end_date=None):
@@ -83,13 +84,12 @@ def fetch_stock_prices(stock, session, start_date=None, end_date=None):
     # Check if this stock is in the Yahoo Finance override list
     if ticker_symbol in YAHOO_FINANCE_OVERRIDE:
         provider = 'yahoo'
-        print(f"Fetching prices for {stock.name} ({ticker_symbol}) in {stock.currency} [Provider: {provider} - FORCED OVERRIDE]")
-        print(f"  Reason: Other providers return incorrect data for this stock")
+        logger.debug("Fetching prices for %s (%s) [Provider: yahoo - FORCED OVERRIDE]", stock.name, ticker_symbol)
     else:
         provider = Config.PRICE_DATA_PROVIDER
-        print(f"Fetching prices for {stock.name} ({ticker_symbol}) in {stock.currency} [Provider: {provider}]")
+        logger.debug("Fetching prices for %s (%s) [Provider: %s]", stock.name, ticker_symbol, provider)
 
-    print(f"  Period: {start_date.date()} to {end_date.date()}")
+    logger.debug("Period: %s to %s", start_date.date(), end_date.date())
 
     # Track which provider actually provided the data
     actual_provider = provider
@@ -114,9 +114,9 @@ def fetch_stock_prices(stock, session, start_date=None, end_date=None):
         # CRITICAL: Use original ticker (ticker_symbol), not FMP-normalized ticker
         if should_fallback and provider != 'yahoo':
             if hist.empty:
-                print(f"  ⚠️  No data from {provider}, trying Yahoo Finance as fallback...")
+                logger.debug("No data from %s, trying Yahoo Finance as fallback...", provider)
             else:
-                print(f"  ⚠️  {provider} missing today's data (latest: {latest_date}), trying Yahoo Finance as fallback...")
+                logger.debug("%s missing today's data (latest: %s), trying Yahoo Finance...", provider, latest_date)
 
             try:
                 from .price_fetchers import YahooFinanceFetcher
@@ -145,11 +145,11 @@ def fetch_stock_prices(stock, session, start_date=None, end_date=None):
                     if hasattr(hist.index, 'tz') and hist.index.tz is not None:
                         hist.index = hist.index.tz_localize(None)
 
-                print(f"  ✓ Using Yahoo Finance data")
-                actual_provider = 'yahoo'  # Track that we fell back to Yahoo
+                logger.debug("Using Yahoo Finance data")
+                actual_provider = 'yahoo'
 
         if hist.empty:
-            print(f"  ❌ No price data available from any provider")
+            logger.debug("No price data available from any provider for %s", stock.name)
             return 0
 
         # Detect the actual trading currency from the exchange
@@ -165,7 +165,7 @@ def fetch_stock_prices(stock, session, start_date=None, end_date=None):
             if exchange_currency:
                 actual_currency = exchange_currency
                 if actual_currency != stock.currency:
-                    print(f"  ℹ️  Price currency: {actual_currency} (DEGIRO uses {stock.currency})")
+                    logger.debug("Price currency: %s (DEGIRO uses %s)", actual_currency, stock.currency)
         except Exception:
             pass  # If we can't get currency info, use stock.currency
 
@@ -200,11 +200,11 @@ def fetch_stock_prices(stock, session, start_date=None, end_date=None):
             stock.data_provider = actual_provider
             session.commit()
 
-        print(f"  ✅ Added {count} price records\n")
+        logger.debug("Added %d price records for %s", count, stock.name)
         return count
 
     except Exception as e:
-        print(f"  ❌ Error fetching prices: {e}\n")
+        logger.error("Error fetching prices for %s: %s", stock.name, e)
         session.rollback()
         return 0
 
@@ -224,20 +224,16 @@ def fetch_all_current_holdings():
 
             if total_qty > 0:
                 current_holdings.append(stock)
-                print(f"Found holding: {stock.name} - {total_qty} shares (Currency: {stock.currency})")
+                logger.debug("Found holding: %s - %d shares", stock.name, total_qty)
 
-        print(f"\n{'='*80}")
-        print(f"Fetching prices for {len(current_holdings)} stocks")
-        print(f"{'='*80}\n")
+        logger.info("Fetching prices for %d stocks", len(current_holdings))
 
         total_records = 0
         for stock in current_holdings:
             records = fetch_stock_prices(stock, session)
             total_records += records
 
-        print(f"{'='*80}")
-        print(f"✅ Fetch complete! Added {total_records} total price records")
-        print(f"{'='*80}")
+        logger.info("Fetch complete: %d total price records", total_records)
 
     finally:
         session.close()

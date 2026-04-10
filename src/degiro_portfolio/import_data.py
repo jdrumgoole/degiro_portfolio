@@ -1,8 +1,11 @@
 """Import transaction data from Excel into SQLite database."""
+import logging
 import pandas as pd
 from datetime import datetime
 from collections import Counter
 from dateutil.parser import parse as dateutil_parse
+
+logger = logging.getLogger(__name__)
 try:
     from .database import SessionLocal, init_db, Stock, Transaction, StockPrice
     from .ticker_resolver import get_ticker_for_stock
@@ -80,11 +83,9 @@ def get_or_create_stock(session, df, product, isin, exchange):
         session.flush()
 
         if yahoo_ticker:
-            print(f"  Created stock: {product} (Native currency: {native_currency}, Ticker: {yahoo_ticker})")
+            logger.debug("Created stock: %s (currency: %s, ticker: %s)", product, native_currency, yahoo_ticker)
         else:
-            print(f"  Created stock: {product} (Native currency: {native_currency}, Ticker: NOT RESOLVED)")
-            print(f"    WARNING: Could not automatically resolve Yahoo Finance ticker for ISIN {isin}")
-            print(f"    Price fetching will not work until ticker is manually added to the database")
+            logger.warning("Could not resolve ticker for %s (ISIN: %s)", product, isin)
 
     elif stock and not stock.yahoo_ticker:
         # Stock exists but ticker wasn't resolved - try to resolve it now
@@ -92,7 +93,7 @@ def get_or_create_stock(session, df, product, isin, exchange):
         if yahoo_ticker:
             stock.yahoo_ticker = yahoo_ticker
             session.flush()
-            print(f"  Resolved ticker for {stock.name}: {yahoo_ticker}")
+            logger.debug("Resolved ticker for %s: %s", stock.name, yahoo_ticker)
 
     return stock
 
@@ -107,10 +108,10 @@ def import_transactions(excel_file=None):
         if not os.path.exists(excel_file):
             excel_file = "Transactions.xlsx"  # Try current directory
 
-    print("Initializing database...")
+    logger.debug("Initializing database...")
     init_db()
 
-    print(f"Reading {excel_file}...")
+    logger.debug("Reading %s", excel_file)
     if str(excel_file).lower().endswith('.csv'):
         df = pd.read_csv(excel_file)
     else:
@@ -119,19 +120,19 @@ def import_transactions(excel_file=None):
     # Rename columns to canonical names (handles 14-col and 18-col formats)
     df = Config.normalize_degiro_columns(df)
 
-    print(f"Found {len(df)} transactions\n")
+    logger.info("Found %d transactions", len(df))
 
     session = SessionLocal()
     try:
         imported = 0
 
-        print("Creating stocks with native currencies...")
+        logger.debug("Creating stocks with native currencies...")
 
         for idx, row in df.iterrows():
             # Check if stock is in the ignore list
             isin = row[get_column('isin')]
             if isin in Config.IGNORED_STOCKS:
-                print(f"  ⏭️  Skipping ignored stock: {row[get_column('product')]} (ISIN: {isin})")
+                logger.debug("Skipping ignored stock: %s (ISIN: %s)", row[get_column('product')], isin)
                 continue
 
             transaction_id = str(row[get_column('transaction_id')])
@@ -168,16 +169,13 @@ def import_transactions(excel_file=None):
             imported += 1
 
             if (idx + 1) % 50 == 0:
-                print(f"Processed {idx + 1} transactions...")
+                logger.debug("Processed %d transactions...", idx + 1)
 
         session.commit()
-        print(f"\n✅ Import complete!")
-        print(f"   Imported: {imported} transactions\n")
+        logger.info("Import complete: %d transactions", imported)
 
         # Fetch prices for all stocks with current holdings
-        print("="*80)
-        print("Fetching prices for current holdings...")
-        print("="*80)
+        logger.debug("Fetching prices for current holdings...")
         stocks = session.query(Stock).all()
         total_prices = 0
         stocks_with_prices = 0
@@ -199,12 +197,9 @@ def import_transactions(excel_file=None):
                         stocks_with_prices += 1
 
         if total_prices > 0:
-            print(f"\n✅ Fetched {total_prices} price records for {stocks_with_prices} stocks\n")
+            logger.info("Fetched %d price records for %d stocks", total_prices, stocks_with_prices)
 
-        # Show summary with currencies
-        print("="*80)
-        print("Stocks in database:")
-        print("="*80)
+        # Log summary
         stocks = session.query(Stock).all()
         for stock in stocks:
             trans_count = session.query(Transaction).filter_by(stock_id=stock.id).count()
@@ -212,21 +207,12 @@ def import_transactions(excel_file=None):
                 Transaction.quantity
             ).all()
             current_holding = sum(q[0] for q in total_qty)
-
-            # Get currency breakdown for this stock
-            transactions = session.query(Transaction).filter_by(stock_id=stock.id).all()
-            currency_breakdown = Counter(t.currency for t in transactions)
-            currency_str = ", ".join(f"{curr}: {count}" for curr, count in currency_breakdown.items())
-
             status = f"{current_holding} shares" if current_holding > 0 else "SOLD"
-            print(f"  {stock.name}")
-            print(f"    Native: {stock.currency} | Holdings: {status}")
-            print(f"    Transactions: {trans_count} ({currency_str})")
-            print()
+            logger.debug("%s: %s, %d transactions", stock.name, status, trans_count)
 
     except Exception as e:
         session.rollback()
-        print(f"❌ Error: {e}")
+        logger.error("Import error: %s", e)
         raise
     finally:
         session.close()

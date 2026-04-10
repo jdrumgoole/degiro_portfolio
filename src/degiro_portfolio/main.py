@@ -1,4 +1,5 @@
 """FastAPI application for stock price visualization."""
+import logging
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
@@ -19,6 +20,8 @@ from .config import Config, get_column
 from .import_data import parse_date
 from .fetch_prices import fetch_stock_prices
 from .price_fetchers import get_price_fetcher, yahoo_rate_limiter
+
+logger = logging.getLogger(__name__)
 from .ticker_resolver import resolve_ticker_from_isin
 
 # Market indices to track
@@ -75,7 +78,7 @@ def ensure_indices_exist(db: Session) -> tuple[int, int]:
 
     except Exception as e:
         db.rollback()
-        print(f"Error fetching indices: {e}")
+        logger.error("Error fetching indices: %s", e)
         raise
 
     return indices_created, prices_fetched
@@ -1042,7 +1045,7 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
                     if total_qty > 0:
                         held_stock_ids.add(stock_id)
 
-                print(f"\n📈 Fetching prices for {len(held_stock_ids)} held stocks (skipping {len(stocks_to_fetch_prices) - len(held_stock_ids)} sold positions)...")
+                logger.debug("Fetching prices for %d held stocks (skipping %d sold positions)", len(held_stock_ids), len(stocks_to_fetch_prices) - len(held_stock_ids))
 
                 for stock_id in held_stock_ids:
                     stock = db.query(Stock).filter_by(id=stock_id).first()
@@ -1141,7 +1144,7 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
                             db.commit()
 
                 except Exception as e:
-                    print(f"Error updating index {index.name}: {e}")
+                    logger.error("Error updating index %s: %s", index.name, e)
 
             message = f"Successfully imported {new_transactions} new transactions"
             if updated_stocks > 0:
@@ -1221,7 +1224,7 @@ async def refresh_live_prices(db: Session = Depends(get_db)):
                     fetcher = get_price_fetcher('twelvedata')
                     quote_data = fetcher.fetch_latest_quote(ticker_symbol)
                 except Exception as e:
-                    print(f"  ⚠️  Twelve Data quote failed for {stock.name}, trying Yahoo Finance: {e}")
+                    logger.debug("Twelve Data quote failed for %s, trying Yahoo: %s", stock.name, e)
 
             # Fallback to Yahoo Finance if Twelve Data not configured or failed
             if not quote_data:

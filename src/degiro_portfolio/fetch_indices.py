@@ -1,7 +1,10 @@
 """Fetch historical index data for benchmarking."""
+import logging
 import sys
 from datetime import datetime
 import yfinance as yf
+
+logger = logging.getLogger(__name__)
 
 try:
     from .database import SessionLocal, init_db, Index, IndexPrice
@@ -23,7 +26,7 @@ def fetch_index_prices():
     session = SessionLocal()
     try:
         for symbol, name in INDICES.items():
-            print(f"\nFetching data for {name} ({symbol})...")
+            logger.debug("Fetching data for %s (%s)", name, symbol)
 
             # Check if index already exists
             index = session.query(Index).filter_by(symbol=symbol).first()
@@ -31,22 +34,22 @@ def fetch_index_prices():
                 index = Index(symbol=symbol, name=name)
                 session.add(index)
                 session.commit()
-                print(f"  Created index: {name}")
+                logger.debug("Created index: %s", name)
             else:
-                print(f"  Index exists: {name}")
+                logger.debug("Index exists: %s", name)
 
             # Delete existing prices to refresh data
             existing_count = session.query(IndexPrice).filter_by(index_id=index.id).count()
             if existing_count > 0:
                 session.query(IndexPrice).filter_by(index_id=index.id).delete()
-                print(f"  Deleted {existing_count} existing price records")
+                logger.debug("Deleted %d existing price records", existing_count)
 
             # Fetch historical data (5 years)
             ticker = yf.Ticker(symbol)
             hist = ticker.history(period="5y")
 
             if hist.empty:
-                print(f"  ⚠️  No data available for {symbol}")
+                logger.debug("No data available for %s", symbol)
                 continue
 
             # Store prices
@@ -61,14 +64,13 @@ def fetch_index_prices():
                 price_count += 1
 
             session.commit()
-            print(f"  ✅ Stored {price_count} price records")
-            print(f"  Date range: {hist.index[0].date()} to {hist.index[-1].date()}")
+            logger.debug("Stored %d price records for %s", price_count, name)
 
-        print("\n✅ All index data fetched successfully")
+        logger.info("All index data fetched successfully")
 
     except Exception as e:
         session.rollback()
-        print(f"❌ Error: {e}")
+        logger.error("Error fetching indices: %s", e)
         raise
     finally:
         session.close()

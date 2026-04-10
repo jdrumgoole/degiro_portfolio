@@ -1,11 +1,14 @@
 """
 Price data fetchers for different providers (Yahoo Finance, Twelve Data, etc.).
 """
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Tuple
 import pandas as pd
 import time
 import threading
+
+logger = logging.getLogger(__name__)
 
 try:
     from .config import Config
@@ -49,7 +52,7 @@ class YahooRateLimiter:
             # Check if we're in cooldown period
             if now < self.cooldown_until:
                 wait_time = self.cooldown_until - now
-                print(f"  ⏳ Yahoo rate limit cooldown: waiting {wait_time:.1f}s")
+                logger.debug("Yahoo rate limit cooldown: waiting %.1fs", wait_time)
                 time.sleep(wait_time)
                 now = time.time()
 
@@ -66,7 +69,7 @@ class YahooRateLimiter:
         with self.request_lock:
             # Set cooldown for 60 seconds
             self.cooldown_until = time.time() + 60.0
-            print("  ⚠️  Yahoo rate limit hit - cooling down for 60 seconds")
+            logger.debug("Yahoo rate limit hit - cooling down for 60 seconds")
 
 
 # Global rate limiter instance
@@ -246,7 +249,7 @@ class FMPFetcher(PriceFetcher):
             }
 
         except Exception as e:
-            print(f"  ❌ FMP quote error for {ticker}: {e}")
+            logger.debug("FMP quote error for %s: %s", ticker, e)
             return None
 
     def fetch_prices(self, ticker: str, start_date: datetime, end_date: datetime) -> pd.DataFrame:
@@ -296,13 +299,13 @@ class FMPFetcher(PriceFetcher):
             # Ensure we have the required columns
             required_cols = ['open', 'high', 'low', 'close', 'volume']
             if not all(col in df.columns for col in required_cols):
-                print(f"  ⚠️  FMP data missing required columns for {ticker}")
+                logger.debug("FMP data missing required columns for %s", ticker)
                 return pd.DataFrame()
 
             return df[required_cols]
 
         except Exception as e:
-            print(f"  ❌ FMP error for {ticker}: {e}")
+            logger.debug("FMP error for %s: %s", ticker, e)
             return pd.DataFrame()
 
 
@@ -429,11 +432,11 @@ class TwelveDataFetcher(PriceFetcher):
             error_msg = str(e)
             # Check for plan limitation error
             if "available starting with Pro" in error_msg or "upgrade" in error_msg.lower():
-                print(f"  ⚠️  {td_ticker}: Real-time quote not available on current Twelve Data plan")
+                logger.debug("%s: Real-time quote not available on current Twelve Data plan", td_ticker)
             elif "symbol" in error_msg.lower() and "invalid" in error_msg.lower():
-                print(f"  ⚠️  {td_ticker}: Symbol not recognized by Twelve Data")
+                logger.debug("%s: Symbol not recognized by Twelve Data", td_ticker)
             else:
-                print(f"  ❌ Twelve Data quote error for {td_ticker} (from {ticker}): {e}")
+                logger.debug("Twelve Data quote error for %s: %s", td_ticker, e)
             return None
 
     def fetch_prices(self, ticker: str, start_date: datetime, end_date: datetime) -> pd.DataFrame:
@@ -480,11 +483,11 @@ class TwelveDataFetcher(PriceFetcher):
             error_msg = str(e)
             # Check for plan limitation error
             if "available starting with Pro" in error_msg or "upgrade" in error_msg.lower():
-                print(f"  ⚠️  {td_ticker}: Not available on current Twelve Data plan (requires Pro or higher)")
+                logger.debug("%s: Not available on current Twelve Data plan", td_ticker)
             elif "symbol" in error_msg.lower() and "invalid" in error_msg.lower():
-                print(f"  ⚠️  {td_ticker}: Symbol not recognized by Twelve Data")
+                logger.debug("%s: Symbol not recognized by Twelve Data", td_ticker)
             else:
-                print(f"  ❌ Twelve Data error for {td_ticker} (from {ticker}): {e}")
+                logger.debug("Twelve Data error for %s: %s", td_ticker, e)
             return pd.DataFrame()
 
 
