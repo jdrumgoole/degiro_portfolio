@@ -904,6 +904,7 @@
         }
 
         function formatPrice(price, currency) {
+            if (price === null || price === undefined) return '—';
             const symbol = getCurrencySymbol(currency);
             const formattedNumber = price.toLocaleString('en-US', {
                 minimumFractionDigits: 2,
@@ -978,8 +979,9 @@
                     totalNetInvested += netInvested;
 
                     // Get current price and convert to EUR using current exchange rates
-                    if (priceData.prices.length > 0) {
-                        const latestPriceData = priceData.prices[priceData.prices.length - 1];
+                    const validPriceData = priceData.prices.filter(p => p.close !== null);
+                    if (validPriceData.length > 0) {
+                        const latestPriceData = validPriceData[validPriceData.length - 1];
                         const latestPrice = latestPriceData.close;
                         const priceCurrency = latestPriceData.currency;
 
@@ -1357,7 +1359,7 @@
         }
 
         function renderStats(data) {
-            const prices = data.prices;
+            const prices = data.prices.filter(p => p.close !== null);
             if (prices.length === 0) return;
 
             // Use actual price currency from exchange data, not DEGIRO transaction currency
@@ -1435,16 +1437,23 @@
         }
 
         function renderChart(data) {
+            // Filter out price records with null values
+            const validPrices = data.prices.filter(p => p.close !== null);
+            if (validPrices.length === 0) {
+                document.getElementById('chart-area').innerHTML = '<p style="text-align: center; color: #718096; padding: 40px;">No price data available for this stock yet. Click "Update Market Data" to fetch prices.</p>';
+                return;
+            }
+
             // Use actual price currency from exchange data, not DEGIRO transaction currency
-            const currency = data.prices.length > 0 && data.prices[0].currency
-                ? data.prices[0].currency
+            const currency = validPrices.length > 0 && validPrices[0].currency
+                ? validPrices[0].currency
                 : data.stock.currency;
-            const latestPrice = data.prices.length > 0 ? data.prices[data.prices.length - 1].close : 0;
-            const dates = data.prices.map(p => p.date);
-            const closePrices = data.prices.map(p => p.close);
-            const openPrices = data.prices.map(p => p.open);
-            const highPrices = data.prices.map(p => p.high);
-            const lowPrices = data.prices.map(p => p.low);
+            const latestPrice = validPrices[validPrices.length - 1].close;
+            const dates = validPrices.map(p => p.date);
+            const closePrices = validPrices.map(p => p.close);
+            const openPrices = validPrices.map(p => p.open);
+            const highPrices = validPrices.map(p => p.high);
+            const lowPrices = validPrices.map(p => p.low);
 
             // ========================================
             // CHART 1: Price Chart (Candlestick)

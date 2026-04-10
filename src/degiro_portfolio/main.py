@@ -449,8 +449,11 @@ async def get_chart_data(stock_id: int, db: Session = Depends(get_db)):
     if not stock:
         raise HTTPException(status_code=404, detail="Stock not found")
 
-    # Get price data
-    prices = db.query(StockPrice).filter_by(stock_id=stock_id).order_by(StockPrice.date).all()
+    # Get price data (exclude records with null close values)
+    prices = db.query(StockPrice).filter(
+        StockPrice.stock_id == stock_id,
+        StockPrice.close.isnot(None)
+    ).order_by(StockPrice.date).all()
 
     # Get transactions
     transactions = db.query(Transaction).filter_by(stock_id=stock_id).order_by(Transaction.date).all()

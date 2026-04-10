@@ -325,3 +325,64 @@ def test_csv_upload_stock_prices_api(csv_server):
         assert resp.status_code == 200, (
             f"Prices API failed for {h['name']}: {resp.text}"
         )
+
+
+def test_csv_upload_clicking_stock_card_no_js_errors(csv_page):
+    """Clicking each stock card should not produce JavaScript errors."""
+    # Collect JS errors during this test
+    js_errors = []
+    csv_page.on("pageerror", lambda err: js_errors.append(str(err)))
+
+    cards = csv_page.locator(".stock-card")
+    count = cards.count()
+
+    for i in range(count):
+        card = cards.nth(i)
+        stock_name = card.locator(".stock-name").inner_text()
+        card.click()
+        # Wait for chart area to update
+        csv_page.wait_for_timeout(2000)
+
+        assert len(js_errors) == 0, (
+            f"JavaScript error after clicking '{stock_name}': {js_errors}"
+        )
+
+
+def test_csv_upload_chart_renders_for_each_stock(csv_page):
+    """Clicking each stock card should render chart data without error banners."""
+    console_errors = []
+    csv_page.on("console", lambda msg: console_errors.append(msg.text) if msg.type == "error" else None)
+
+    cards = csv_page.locator(".stock-card")
+    count = cards.count()
+
+    for i in range(count):
+        console_errors.clear()
+        card = cards.nth(i)
+        stock_name = card.locator(".stock-name").inner_text()
+        card.click()
+
+        # Wait for chart data to load
+        csv_page.wait_for_timeout(3000)
+
+        # Check for error banner in page
+        error_banner = csv_page.locator(".error-message")
+        if error_banner.count() > 0:
+            error_text = error_banner.first.inner_text()
+            assert "Failed to load" not in error_text, (
+                f"Chart error for '{stock_name}': {error_text}. "
+                f"Console errors: {console_errors}"
+            )
+
+
+def test_csv_upload_no_error_banner_on_page_load(csv_page):
+    """The page should not show any error banners after CSV import."""
+    csv_page.reload()
+    csv_page.wait_for_selector(".stock-card", timeout=15000)
+    csv_page.wait_for_timeout(1000)
+
+    # Check for visible error banners (not HTML source which contains error handler code)
+    error_banner = csv_page.locator(".error-message")
+    if error_banner.count() > 0 and error_banner.first.is_visible():
+        error_text = error_banner.first.inner_text()
+        assert False, f"Error banner visible on page load: {error_text}"
