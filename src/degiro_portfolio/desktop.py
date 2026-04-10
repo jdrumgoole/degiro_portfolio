@@ -102,22 +102,14 @@ def run_desktop(*, port: int = 8000) -> None:
     if not ready_event.wait(timeout=20):
         print("Warning: server may not be ready yet", file=sys.stderr)
 
-    # Resolve icon path
-    import os
-    icon_path = os.path.join(os.path.dirname(__file__), "static", "icon-256.png")
-
     # Create the native window
-    window_kwargs = dict(
-        title="DEGIRO Portfolio",
-        url=url,
+    window = webview.create_window(
+        "DEGIRO Portfolio",
+        url,
         width=1280,
         height=900,
         min_size=(800, 600),
     )
-    if os.path.exists(icon_path):
-        window_kwargs["icon"] = icon_path
-
-    window = webview.create_window(**window_kwargs)
 
     def _on_closing() -> None:
         """Shut down the server when the window closes."""
