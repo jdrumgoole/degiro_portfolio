@@ -454,6 +454,471 @@ def test_ping_uptime_formatting(client, mocker):
 
 
 # ---------------------------------------------------------------------------
+# Upload endpoint — coverage for new-stock, duplicate, FMP, index branches
+# ---------------------------------------------------------------------------
+
+_UPLOAD_CSV_HEADER = (
+    "Date,Time,Product,ISIN,Reference exchange,Quantity,Price,Currency,"
+    "Value EUR,Total EUR,Venue,Exchange rate,Fees EUR,Transaction ID\n"
+)
+
+
+def _make_upload_csv(rows: list[str]) -> bytes:
+    return (_UPLOAD_CSV_HEADER + "".join(rows)).encode()
+
+
+@pytest.fixture
+def cleanup_test_isins():
+    """Yield a set; delete stocks (+ their txns/prices) for any ISIN added to it."""
+    isins: set[str] = set()
+    yield isins
+    if not isins:
+        return
+    from degiro_portfolio.database import (
+        SessionLocal, Stock, Transaction, StockPrice
+    )
+    db = SessionLocal()
+    try:
+        stocks = db.query(Stock).filter(Stock.isin.in_(isins)).all()
+        for s in stocks:
+            db.query(StockPrice).filter_by(stock_id=s.id).delete()
+            db.query(Transaction).filter_by(stock_id=s.id).delete()
+            db.delete(s)
+        # Also purge any future-dated StockPrice rows (from FMP mock quotes
+        # injected on existing stocks during upload tests).
+        tomorrow = datetime.now().replace(
+            hour=0, minute=0, second=0, microsecond=0
+        ) + timedelta(days=1)
+        db.query(StockPrice).filter(StockPrice.date >= tomorrow).delete()
+        db.commit()
+    finally:
+        db.close()
+
+
+def _patch_upload_externals(mocker):
+    """Mute all network-touching calls made during upload post-processing."""
+    mocker.patch('degiro_portfolio.main.fetch_stock_prices', return_value=0)
+    mocker.patch('degiro_portfolio.main.yahoo_rate_limiter.wait_if_needed')
+    mock_ticker = mocker.MagicMock()
+    mock_ticker.history.return_value = _make_mock_price_df()
+    mocker.patch('degiro_portfolio.main.yf.Ticker', return_value=mock_ticker)
+    return mock_ticker
+
+
+def test_upload_creates_new_stock_and_skips_duplicate_transaction(client, mocker, cleanup_test_isins):
+    cleanup_test_isins.add("US9999999991")
+    """Upload creates a new stock on first call and skips duplicates on the second.
+
+    Covers main.py 984-1030 (new-stock insert, transaction insert, duplicate skip,
+    existing-stock else branch) and 1040-1058 (held-stock price fetch loop).
+    """
+    _patch_upload_externals(mocker)
+
+    csv = _make_upload_csv([
+        "02-01-2026,10:00:00,COVERAGE CORP,US9999999991,NASDAQ,5,100.00,USD,"
+        "500.00,-430.00,XNAS,0.86,1.00,cov-001\n",
+        "03-01-2026,10:00:00,COVERAGE CORP,US9999999991,NASDAQ,3,110.00,USD,"
+        "330.00,-285.00,XNAS,0.86,1.00,cov-002\n",
+    ])
+
+    r1 = client.post("/api/upload-transactions",
+                     files={"file": ("t.csv", csv, "text/csv")})
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["success"] is True
+    assert "2 new transactions" in r1.json()["message"]
+
+    # Second upload: stock exists → else-branch; rows exist → duplicate skip.
+    r2 = client.post("/api/upload-transactions",
+                     files={"file": ("t.csv", csv, "text/csv")})
+    assert r2.status_code == 200
+    assert "0 new transactions" in r2.json()["message"]
+
+    from degiro_portfolio.database import SessionLocal, Stock, Transaction
+    db = SessionLocal()
+    try:
+        stock = db.query(Stock).filter_by(isin="US9999999991").first()
+        assert stock is not None
+        assert stock.name == "COVERAGE CORP"
+        assert db.query(Transaction).filter_by(stock_id=stock.id).count() == 2
+    finally:
+        db.close()
+
+
+def test_upload_skips_price_fetch_for_fully_sold_positions(client, mocker, cleanup_test_isins):
+    cleanup_test_isins.add("US9999999992")
+    """A new stock bought then fully sold has net qty == 0 → held_stock_ids excludes it.
+
+    Covers main.py 1040-1058 skipped-sold branch (len(held) < len(to_fetch)).
+    """
+    fetch_mock = mocker.patch('degiro_portfolio.main.fetch_stock_prices',
+                              return_value=0)
+    mocker.patch('degiro_portfolio.main.yahoo_rate_limiter.wait_if_needed')
+    mock_ticker = mocker.MagicMock()
+    mock_ticker.history.return_value = _make_mock_price_df()
+    mocker.patch('degiro_portfolio.main.yf.Ticker', return_value=mock_ticker)
+
+    csv = _make_upload_csv([
+        "02-01-2026,10:00:00,SOLDOUT INC,US9999999992,NASDAQ,10,50.00,USD,"
+        "500.00,-430.00,XNAS,0.86,1.00,sold-001\n",
+        "03-01-2026,10:00:00,SOLDOUT INC,US9999999992,NASDAQ,-10,55.00,USD,"
+        "550.00,473.00,XNAS,0.86,1.00,sold-002\n",
+    ])
+
+    r = client.post("/api/upload-transactions",
+                    files={"file": ("t.csv", csv, "text/csv")})
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+    # fetch_stock_prices must NOT be called for the sold-out stock
+    fetch_mock.assert_not_called()
+
+
+def test_upload_fmp_live_prices_inserts_new_price(client, mocker, cleanup_test_isins):
+    cleanup_test_isins.add("US9999999993")
+    """When PRICE_DATA_PROVIDER='fmp', upload should refresh live prices via FMP.
+
+    Covers main.py 1063-1107 (FMP fetcher branch, StockPrice insert path).
+    """
+    _patch_upload_externals(mocker)
+    mocker.patch('degiro_portfolio.main.Config.PRICE_DATA_PROVIDER', 'fmp')
+
+    # Future timestamp guarantees the "insert new price" branch (no existing row)
+    future_ts = (datetime.now() + timedelta(days=1)).replace(microsecond=0)
+    fake_fetcher = mocker.MagicMock()
+    fake_fetcher.fetch_latest_quote.return_value = {
+        "price": 123.45, "open": 120.0, "high": 125.0, "low": 119.0,
+        "volume": 10_000, "timestamp": future_ts.isoformat(),
+    }
+    mocker.patch('degiro_portfolio.price_fetchers.FMPFetcher',
+                 return_value=fake_fetcher)
+
+    csv = _make_upload_csv([
+        "02-01-2026,10:00:00,FMP CORP,US9999999993,NASDAQ,5,100.00,USD,"
+        "500.00,-430.00,XNAS,0.86,1.00,fmp-001\n",
+    ])
+    r = client.post("/api/upload-transactions",
+                    files={"file": ("t.csv", csv, "text/csv")})
+    assert r.status_code == 200, r.text
+    assert r.json()["success"] is True
+    # FMPFetcher must have been consulted for at least one held stock
+    assert fake_fetcher.fetch_latest_quote.called
+
+    from degiro_portfolio.database import SessionLocal, StockPrice
+    db = SessionLocal()
+    try:
+        # At least one new StockPrice row at the future timestamp was inserted
+        inserted = db.query(StockPrice).filter(
+            StockPrice.date >= future_ts.replace(hour=0, minute=0, second=0)
+        ).count()
+        assert inserted >= 1
+    finally:
+        db.close()
+
+
+def test_upload_index_update_handles_yfinance_exception(client, mocker, cleanup_test_isins):
+    cleanup_test_isins.add("US9999999994")
+    """If yfinance raises while refreshing indices post-upload, upload still succeeds.
+
+    Covers main.py 1146-1147 (index-update exception branch).
+    """
+    mocker.patch('degiro_portfolio.main.fetch_stock_prices', return_value=0)
+    mocker.patch('degiro_portfolio.main.yahoo_rate_limiter.wait_if_needed')
+
+    mock_ticker = mocker.MagicMock()
+    mock_ticker.history.side_effect = RuntimeError("boom")
+    mocker.patch('degiro_portfolio.main.yf.Ticker', return_value=mock_ticker)
+
+    csv = _make_upload_csv([
+        "02-01-2026,10:00:00,BOOM CORP,US9999999994,NASDAQ,1,10.00,USD,"
+        "10.00,-9.00,XNAS,0.86,1.00,boom-001\n",
+    ])
+    r = client.post("/api/upload-transactions",
+                    files={"file": ("t.csv", csv, "text/csv")})
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+
+
+# ---------------------------------------------------------------------------
+# Batch 2 — error branches, fallbacks, resolver paths
+# ---------------------------------------------------------------------------
+
+
+def test_exchange_rates_yahoo_empty_and_rate_limit(client, mocker):
+    """Force cached rates to be missing so Yahoo fetch runs; simulate empty
+    history and a rate-limit exception to cover the fallback branches.
+
+    Covers main.py 330-367.
+    """
+    from degiro_portfolio.database import SessionLocal, ExchangeRate
+
+    db = SessionLocal()
+    try:
+        db.query(ExchangeRate).delete()
+        db.commit()
+    finally:
+        db.close()
+
+    # First call returns empty DF (USD), second raises rate-limit (GBP),
+    # third raises generic error (SEK)
+    empty_ticker = mocker.MagicMock()
+    empty_ticker.history.return_value = pd.DataFrame()
+    rl_ticker = mocker.MagicMock()
+    rl_ticker.history.side_effect = RuntimeError("Too Many Requests rate")
+    err_ticker = mocker.MagicMock()
+    err_ticker.history.side_effect = RuntimeError("boom")
+
+    mocker.patch('degiro_portfolio.main.yf.Ticker',
+                 side_effect=[empty_ticker, rl_ticker, err_ticker])
+    report_rl = mocker.patch(
+        'degiro_portfolio.main.yahoo_rate_limiter.report_rate_limit'
+    )
+    mocker.patch('degiro_portfolio.main.yahoo_rate_limiter.wait_if_needed')
+
+    response = client.get("/api/exchange-rates")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True
+    # All three currencies should have fallback values assigned
+    assert data["rates"]["USD"] == 0.85
+    assert data["rates"]["GBP"] == 1.18
+    assert data["rates"]["SEK"] == 0.093
+    report_rl.assert_called()  # GBP branch hit
+
+
+def test_update_market_data_resolves_missing_ticker(client, mocker):
+    """update-market-data auto-resolves missing yahoo_ticker via resolver.
+
+    Covers main.py 1337-1344.
+    """
+    from degiro_portfolio.database import SessionLocal, Stock
+
+    # Null one stock's yahoo_ticker to force the resolver path
+    db = SessionLocal()
+    original = None
+    try:
+        stock = db.query(Stock).filter(Stock.yahoo_ticker.isnot(None)).first()
+        original = (stock.id, stock.yahoo_ticker)
+        stock.yahoo_ticker = None
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        mocker.patch(
+            'degiro_portfolio.main.resolve_ticker_from_isin',
+            return_value='RESOLVED.TEST',
+        )
+        mock_fetcher = mocker.MagicMock()
+        mock_fetcher.fetch_prices.return_value = _make_mock_price_df()
+        mocker.patch('degiro_portfolio.main.get_price_fetcher',
+                     return_value=mock_fetcher)
+        mock_ticker = mocker.MagicMock()
+        mock_ticker.history.return_value = _make_mock_price_df()
+        mocker.patch('degiro_portfolio.main.yf.Ticker', return_value=mock_ticker)
+        mocker.patch('degiro_portfolio.main.yahoo_rate_limiter.wait_if_needed')
+
+        r = client.post("/api/update-market-data")
+        assert r.status_code == 200
+        assert r.json()["success"] is True
+
+        # Stock should now have the resolved ticker persisted
+        db = SessionLocal()
+        try:
+            refreshed = db.query(Stock).filter_by(id=original[0]).first()
+            assert refreshed.yahoo_ticker == 'RESOLVED.TEST'
+        finally:
+            db.close()
+    finally:
+        # Restore original ticker
+        db = SessionLocal()
+        try:
+            s = db.query(Stock).filter_by(id=original[0]).first()
+            s.yahoo_ticker = original[1]
+            db.commit()
+        finally:
+            db.close()
+
+
+def test_update_market_data_fallback_yahoo_when_primary_empty(client, mocker):
+    """When primary fetcher returns empty and provider != 'yahoo', fall back
+    to YahooFinanceFetcher.
+
+    Covers main.py 1353-1359.
+    """
+    mocker.patch('degiro_portfolio.main.Config.PRICE_DATA_PROVIDER', 'twelvedata')
+
+    empty_fetcher = mocker.MagicMock()
+    empty_fetcher.fetch_prices.return_value = pd.DataFrame()
+    mocker.patch('degiro_portfolio.main.get_price_fetcher',
+                 return_value=empty_fetcher)
+
+    yahoo_instance = mocker.MagicMock()
+    yahoo_instance.fetch_prices.return_value = _make_mock_price_df()
+    mocker.patch('degiro_portfolio.price_fetchers.YahooFinanceFetcher',
+                 return_value=yahoo_instance)
+
+    mock_idx_ticker = mocker.MagicMock()
+    mock_idx_ticker.history.return_value = _make_mock_price_df()
+    mocker.patch('degiro_portfolio.main.yf.Ticker',
+                 return_value=mock_idx_ticker)
+    mocker.patch('degiro_portfolio.main.yahoo_rate_limiter.wait_if_needed')
+
+    r = client.post("/api/update-market-data")
+    assert r.status_code == 200
+    assert r.json()["success"] is True
+    yahoo_instance.fetch_prices.assert_called()
+
+
+def test_update_market_data_index_rate_limit_exception(client, mocker):
+    """yfinance raising a rate-limit error during index update must be caught
+    and the rate-limiter notified.
+
+    Covers main.py 1431-1435.
+    """
+    mock_fetcher = mocker.MagicMock()
+    mock_fetcher.fetch_prices.return_value = _make_mock_price_df()
+    mocker.patch('degiro_portfolio.main.get_price_fetcher',
+                 return_value=mock_fetcher)
+
+    mock_ticker = mocker.MagicMock()
+    mock_ticker.history.side_effect = RuntimeError("Too Many Requests")
+    mocker.patch('degiro_portfolio.main.yf.Ticker', return_value=mock_ticker)
+    report_rl = mocker.patch(
+        'degiro_portfolio.main.yahoo_rate_limiter.report_rate_limit'
+    )
+    mocker.patch('degiro_portfolio.main.yahoo_rate_limiter.wait_if_needed')
+
+    r = client.post("/api/update-market-data")
+    assert r.status_code == 200
+    data = r.json()
+    assert data["success"] is True
+    assert data["errors"]  # index errors propagated to message list
+    report_rl.assert_called()
+
+
+def test_purge_database_error_branch(client, mocker):
+    """If commit fails during purge, endpoint returns 500 with rollback.
+
+    Covers main.py 1498-1500.
+    """
+    mocker.patch(
+        'sqlalchemy.orm.Session.commit',
+        side_effect=RuntimeError("commit failed"),
+    )
+    r = client.post("/api/purge-database")
+    assert r.status_code == 500
+    body = r.json()
+    assert body["success"] is False
+    assert "commit failed" in body["message"]
+
+
+def test_shutdown_endpoint_without_event_triggers_timer(client, mocker):
+    """/api/shutdown with no shutdown event falls back to os._exit via Timer.
+
+    Covers main.py 1517-1522 (Timer branch).
+    """
+    import degiro_portfolio.main as m
+
+    mocker.patch.object(m, '_shutdown_event', None)
+    mock_timer_cls = mocker.patch('threading.Timer')
+
+    r = client.post("/api/shutdown")
+    assert r.status_code == 200
+    assert r.json()["status"] == "shutting_down"
+    mock_timer_cls.assert_called_once()
+
+
+def test_shutdown_endpoint_with_event_sets_event(client, mocker):
+    """/api/shutdown with a shutdown event calls event.set().
+
+    Covers main.py 1518 (event branch).
+    """
+    import degiro_portfolio.main as m
+
+    fake_event = mocker.MagicMock()
+    mocker.patch.object(m, '_shutdown_event', fake_event)
+
+    r = client.post("/api/shutdown")
+    assert r.status_code == 200
+    fake_event.set.assert_called_once()
+
+
+def test_ensure_indices_exist_rollback_on_error(mocker):
+    """ensure_indices_exist rolls back and re-raises on DB error.
+
+    Covers main.py 79-82.
+    """
+    from degiro_portfolio.main import ensure_indices_exist
+    from degiro_portfolio.database import SessionLocal, Index, IndexPrice
+
+    db = SessionLocal()
+    try:
+        db.query(IndexPrice).delete()
+        db.query(Index).delete()
+        db.commit()
+    finally:
+        db.close()
+
+    mock_ticker = mocker.MagicMock()
+    mock_ticker.history.side_effect = RuntimeError("kaboom")
+    mocker.patch('degiro_portfolio.main.yf.Ticker', return_value=mock_ticker)
+    mocker.patch('degiro_portfolio.main.yahoo_rate_limiter.wait_if_needed')
+
+    db = SessionLocal()
+    try:
+        with pytest.raises(RuntimeError, match="kaboom"):
+            ensure_indices_exist(db)
+    finally:
+        db.close()
+
+
+def test_refresh_live_prices_missing_ticker_and_error(client, mocker):
+    """refresh-live-prices: one held stock has no yahoo_ticker (skip with
+    error), another hits a yfinance rate-limit exception.
+
+    Covers main.py 1213-1214, 1263-1268.
+    """
+    from degiro_portfolio.database import SessionLocal, Stock
+
+    db = SessionLocal()
+    saved: list[tuple[int, str]] = []
+    try:
+        stocks = db.query(Stock).filter(
+            Stock.yahoo_ticker.isnot(None)
+        ).limit(1).all()
+        for s in stocks:
+            saved.append((s.id, s.yahoo_ticker))
+            s.yahoo_ticker = None
+        db.commit()
+    finally:
+        db.close()
+
+    try:
+        mock_ticker = mocker.MagicMock()
+        mock_ticker.history.side_effect = RuntimeError("Too Many Requests")
+        mocker.patch('yfinance.Ticker', return_value=mock_ticker)
+        report_rl = mocker.patch(
+            'degiro_portfolio.main.yahoo_rate_limiter.report_rate_limit'
+        )
+        mocker.patch('degiro_portfolio.main.yahoo_rate_limiter.wait_if_needed')
+
+        r = client.post("/api/refresh-live-prices")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["success"] is True
+        assert data["errors"]  # both missing-ticker and rate-limit errors
+        report_rl.assert_called()
+    finally:
+        db = SessionLocal()
+        try:
+            for stock_id, ticker in saved:
+                s = db.query(Stock).filter_by(id=stock_id).first()
+                s.yahoo_ticker = ticker
+            db.commit()
+        finally:
+            db.close()
+
+
+# ---------------------------------------------------------------------------
 # Destructive test (must run last in this module)
 # ---------------------------------------------------------------------------
 

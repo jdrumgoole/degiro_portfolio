@@ -84,7 +84,7 @@ def ensure_indices_exist(db: Session) -> tuple[int, int]:
     return indices_created, prices_fetched
 
 
-app = FastAPI(title="DEGIRO Portfolio", version="0.4.0")
+app = FastAPI(title="DEGIRO Portfolio", version="0.5.5")
 
 # Track server start time
 SERVER_START_TIME = datetime.now()
@@ -97,7 +97,7 @@ async def startup_event():
 
 
 @app.get("/api/ping")
-async def ping():
+def ping():
     """Health check endpoint returning server name and uptime."""
     uptime_seconds = (datetime.now() - SERVER_START_TIME).total_seconds()
 
@@ -168,14 +168,14 @@ class StockInfo:
 
 
 @app.get("/")
-async def root():
+def root():
     """Serve the main page."""
     index_path = os.path.join(os.path.dirname(__file__), "static", "index.html")
     return FileResponse(index_path)
 
 
 @app.get("/api/holdings")
-async def get_holdings(db: Session = Depends(get_db)):
+def get_holdings(db: Session = Depends(get_db)):
     """Get all current stock holdings.
 
     Optimized to use bulk queries instead of N+1 pattern.
@@ -283,7 +283,7 @@ async def get_holdings(db: Session = Depends(get_db)):
 
 
 @app.get("/api/market-data-status")
-async def get_market_data_status(db: Session = Depends(get_db)):
+def get_market_data_status(db: Session = Depends(get_db)):
     """Get the most recent market data date."""
     # Get most recent price date across all stocks
     latest_price = db.query(StockPrice).order_by(StockPrice.date.desc()).first()
@@ -301,7 +301,7 @@ async def get_market_data_status(db: Session = Depends(get_db)):
 
 
 @app.get("/api/exchange-rates")
-async def get_exchange_rates(db: Session = Depends(get_db)):
+def get_exchange_rates(db: Session = Depends(get_db)):
     """Get current exchange rates for currency conversion.
 
     Uses cached rates from the database if available for today.
@@ -384,7 +384,7 @@ def _get_fallback_rate(currency: str) -> float:
 
 
 @app.get("/api/stock/{stock_id}/prices")
-async def get_stock_prices(stock_id: int, db: Session = Depends(get_db)):
+def get_stock_prices(stock_id: int, db: Session = Depends(get_db)):
     """Get historical prices for a stock."""
     stock = db.query(Stock).filter(Stock.id == stock_id).first()
     if not stock:
@@ -415,7 +415,7 @@ async def get_stock_prices(stock_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/stock/{stock_id}/transactions")
-async def get_stock_transactions(stock_id: int, db: Session = Depends(get_db)):
+def get_stock_transactions(stock_id: int, db: Session = Depends(get_db)):
     """Get transaction history for a stock."""
     stock = db.query(Stock).filter(Stock.id == stock_id).first()
     if not stock:
@@ -447,7 +447,7 @@ async def get_stock_transactions(stock_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/stock/{stock_id}/chart-data")
-async def get_chart_data(stock_id: int, db: Session = Depends(get_db)):
+def get_chart_data(stock_id: int, db: Session = Depends(get_db)):
     """Get chart data for a stock including prices and transactions."""
     stock = db.query(Stock).filter(Stock.id == stock_id).first()
     if not stock:
@@ -616,7 +616,7 @@ async def get_chart_data(stock_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/portfolio-summary")
-async def get_portfolio_summary(db: Session = Depends(get_db)):
+def get_portfolio_summary(db: Session = Depends(get_db)):
     """Compute portfolio summary in a single server-side call.
 
     Returns total holdings count, net invested, current value, and gain/loss.
@@ -698,7 +698,7 @@ async def get_portfolio_summary(db: Session = Depends(get_db)):
 
 
 @app.get("/api/portfolio-performance")
-async def get_portfolio_performance(db: Session = Depends(get_db)):
+def get_portfolio_performance(db: Session = Depends(get_db)):
     """Get percentage return performance for all currently held stocks.
 
     Optimized to fetch all data in bulk queries.
@@ -776,7 +776,7 @@ async def get_portfolio_performance(db: Session = Depends(get_db)):
 
 
 @app.get("/api/portfolio-valuation-history")
-async def get_portfolio_valuation_history(db: Session = Depends(get_db)):
+def get_portfolio_valuation_history(db: Session = Depends(get_db)):
     """
     Get historical portfolio valuation over time.
     Returns dates, net invested capital (buys - sells), and portfolio values (all in EUR).
@@ -1180,7 +1180,7 @@ async def upload_transactions(file: UploadFile = File(...), db: Session = Depend
 
 
 @app.post("/api/refresh-live-prices")
-async def refresh_live_prices(db: Session = Depends(get_db)):
+def refresh_live_prices(db: Session = Depends(get_db)):
     """Fetch real-time price quotes for currently held stocks using Twelve Data or Yahoo Finance.
 
     Optimized to use bulk query for holdings calculation.
@@ -1303,7 +1303,7 @@ async def refresh_live_prices(db: Session = Depends(get_db)):
 
 
 @app.post("/api/update-market-data")
-async def update_market_data(db: Session = Depends(get_db)):
+def update_market_data(db: Session = Depends(get_db)):
     """Fetch latest market data for currently held stocks and indices.
 
     Optimized to use bulk query for holdings calculation.
@@ -1459,7 +1459,7 @@ async def update_market_data(db: Session = Depends(get_db)):
 
 
 @app.post("/api/purge-database")
-async def purge_database(db: Session = Depends(get_db)):
+def purge_database(db: Session = Depends(get_db)):
     """Purge all data from the database (stocks, transactions, prices, indices).
 
     WARNING: This is a destructive operation that cannot be undone!
@@ -1512,7 +1512,7 @@ _shutdown_event: "_asyncio.Event | None" = None
 
 
 @app.post("/api/shutdown")
-async def shutdown():
+def shutdown():
     """Shut down the server (used by desktop mode when the window closes)."""
     import threading as _threading
     if _shutdown_event is not None:

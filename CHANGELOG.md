@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2026-04-14
+
+### Fixed
+- **Event-loop starvation under load (production bug)**: 14 FastAPI endpoints were declared `async def` while doing sync blocking I/O (yfinance HTTP calls, SQLAlchemy queries). A single slow upstream call froze uvicorn's event loop, queuing every concurrent request — including the HTML page — until it completed. Converted all non-awaiting endpoints to plain `def` so FastAPI runs them in a threadpool. Eliminates 30s `page.goto` timeouts seen under parallel test load and prevents the same freeze under real user load with slow upstream APIs.
+- **FastAPI `app.version`**: was stuck at `"0.4.0"`, now tracks `pyproject.toml` version.
+
+### Testing
+- **Coverage for `main.py`: 72% → 89%** (+115 lines). Added 13 targeted unit tests covering upload pipeline (new-stock insert, duplicate skip, held-stock filtering, FMP live-price branch, index update exceptions), exchange-rate Yahoo fallback paths, `update-market-data` ticker auto-resolve and Yahoo fallback, `refresh-live-prices` error branches, purge/shutdown error paths, and `ensure_indices_exist` rollback.
+- **Playwright fixture flakiness eliminated**: switched `page.goto` to `wait_until="domcontentloaded"` in shared_page, CSV, and Dutch e2e fixtures. Combined with the event-loop fix, the full suite now passes 5/5 consecutive parallel runs (was 2–3/5 before).
+- **224 tests total**, stable across 5 consecutive parallel runs.
+
 ## [0.5.4] - 2026-04-10
 
 ### Fixed

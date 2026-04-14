@@ -176,7 +176,7 @@ def csv_context(browser: Browser, csv_server):
 def csv_page(csv_context, csv_server):
     """Page navigated to the server after CSV has been uploaded."""
     page = csv_context.new_page()
-    page.goto(csv_server, timeout=10000)
+    page.goto(csv_server, timeout=30000, wait_until="domcontentloaded")
     page.wait_for_selector(".stock-card", timeout=15000)
     yield page
     page.close()

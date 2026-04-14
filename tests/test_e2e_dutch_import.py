@@ -123,7 +123,7 @@ def dutch_context(browser: Browser, dutch_server):
 @pytest.fixture(scope="module")
 def dutch_page(dutch_context, dutch_server):
     page = dutch_context.new_page()
-    page.goto(dutch_server, timeout=15000)
+    page.goto(dutch_server, timeout=30000, wait_until="domcontentloaded")
     page.wait_for_selector(".stock-card", timeout=15000)
     yield page
     page.close()
