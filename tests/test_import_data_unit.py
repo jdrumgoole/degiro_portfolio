@@ -226,3 +226,83 @@ def test_import_multiple_stocks_from_csv(tmp_path):
         assert names == {"ALPHA INC", "BETA CORP"}
 
     _run_import_test(tmp_path, csv, expected_stocks=2, expected_txns=2, check_fn=check)
+
+
+def test_import_two_etfs_sharing_first_word(tmp_path):
+    """Regression: two iShares ETFs with different ISINs both share derived
+    symbol 'ISHARES'. Must not hit a UNIQUE constraint on stocks.symbol.
+    """
+    csv = (
+        "Date,Time,Product,ISIN,Reference exchange,Venue,Quantity,Price,,Local value,,Value EUR,Exchange rate,AutoFX Fee,Transaction and/or third party fees EUR,Total EUR,Order ID,\n"
+        "15-03-2026,09:00,ISHARES MSCI WORLD SMALL CAP UCITS ETF USD (ACC),IE00BF4RFH31,TDG,XAMS,5,10.00,EUR,50.00,EUR,50.00,1.00,0.00,1.00,-51.00,,etf-001\n"
+        "16-03-2026,10:00,ISHARES CORE S&P 500 UCITS ETF USD (ACC),IE00B5BMR087,TDG,XAMS,3,400.00,EUR,1200.00,EUR,1200.00,1.00,0.00,1.00,-1201.00,,etf-002\n"
+    )
+
+    def check(stocks, txns, session):
+        isins = {s.isin for s in stocks}
+        assert isins == {"IE00BF4RFH31", "IE00B5BMR087"}
+        symbols = [s.symbol for s in stocks]
+        assert symbols.count("ISHARES") == 2
+
+    _run_import_test(tmp_path, csv, expected_stocks=2, expected_txns=2, check_fn=check)
+
+
+def test_migrate_drops_legacy_unique_index_on_symbol(tmp_path):
+    """Regression: the migration drops the legacy UNIQUE constraint on
+    stocks.symbol so colliding symbols can coexist.
+
+    Uses a local engine to avoid mutating the shared module globals
+    (parallel-safety).
+    """
+    from sqlalchemy import create_engine, text
+
+    db_path = tmp_path / "legacy.db"
+    local_engine = create_engine(f"sqlite:///{db_path}",
+                                 connect_args={"check_same_thread": False})
+
+    # Build a legacy schema: stocks.symbol has UNIQUE.
+    with local_engine.begin() as conn:
+        conn.execute(text(
+            "CREATE TABLE stocks ("
+            " id INTEGER PRIMARY KEY,"
+            " symbol VARCHAR, name VARCHAR, isin VARCHAR,"
+            " exchange VARCHAR, currency VARCHAR,"
+            " yahoo_ticker VARCHAR, data_provider VARCHAR)"
+        ))
+        conn.execute(text("CREATE UNIQUE INDEX ix_stocks_symbol ON stocks (symbol)"))
+        conn.execute(text("CREATE UNIQUE INDEX ix_stocks_isin ON stocks (isin)"))
+
+    # Run the migration directly against the local engine.
+    from degiro_portfolio import database as db_mod
+    with local_engine.begin() as conn:
+        row = conn.execute(text(
+            "SELECT sql FROM sqlite_master WHERE name='ix_stocks_symbol'"
+        )).fetchone()
+        assert "UNIQUE" in (row[0] or "").upper()
+
+    # Patch the engine the migration uses, then call it.
+    original_engine = db_mod.engine
+    db_mod.engine = local_engine
+    try:
+        db_mod._migrate_drop_stocks_symbol_unique()
+    finally:
+        db_mod.engine = original_engine
+
+    with local_engine.begin() as conn:
+        sql = conn.execute(text(
+            "SELECT sql FROM sqlite_master WHERE name='ix_stocks_symbol'"
+        )).scalar()
+        assert sql is not None
+        assert "UNIQUE" not in sql.upper()
+
+        # Confirm two rows can share a symbol after migration.
+        conn.execute(text(
+            "INSERT INTO stocks (symbol, name, isin) "
+            "VALUES ('ISHARES', 'A', 'IE00BF4RFH31')"
+        ))
+        conn.execute(text(
+            "INSERT INTO stocks (symbol, name, isin) "
+            "VALUES ('ISHARES', 'B', 'IE00B5BMR087')"
+        ))
+
+    local_engine.dispose()

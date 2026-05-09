@@ -84,7 +84,7 @@ def ensure_indices_exist(db: Session) -> tuple[int, int]:
     return indices_created, prices_fetched
 
 
-app = FastAPI(title="DEGIRO Portfolio", version="0.5.5")
+app = FastAPI(title="DEGIRO Portfolio", version="0.5.6")
 
 # Track server start time
 SERVER_START_TIME = datetime.now()

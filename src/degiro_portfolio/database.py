@@ -1,9 +1,12 @@
 """Database models and connection for the stockchart application."""
 from datetime import datetime
+import logging
 import os
-from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, ForeignKey, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
+
+logger = logging.getLogger(__name__)
 
 # Database configuration - check environment variable first (for testing)
 def get_database_url():
@@ -33,7 +36,7 @@ class Stock(Base):
     __tablename__ = "stocks"
 
     id = Column(Integer, primary_key=True, index=True)
-    symbol = Column(String, unique=True, index=True)  # Original symbol from transaction data
+    symbol = Column(String, index=True)  # Display label derived from product name; not unique (e.g. multiple iShares ETFs)
     name = Column(String)
     isin = Column(String, unique=True, index=True)
     exchange = Column(String)
@@ -120,6 +123,28 @@ class ExchangeRate(Base):
 def init_db():
     """Initialize the database, creating all tables."""
     Base.metadata.create_all(bind=engine)
+    _migrate_drop_stocks_symbol_unique()
+
+
+def _migrate_drop_stocks_symbol_unique() -> None:
+    """One-shot SQLite migration: rebuild ix_stocks_symbol as non-unique.
+
+    Older DBs created stocks.symbol with UNIQUE, which collides on DEGIRO
+    product names that share a first word (e.g. multiple iShares ETFs).
+    """
+    with engine.begin() as conn:
+        row = conn.execute(text(
+            "SELECT sql FROM sqlite_master "
+            "WHERE type='index' AND name='ix_stocks_symbol'"
+        )).fetchone()
+        if row is None:
+            return
+        sql = (row[0] or "").upper()
+        if "UNIQUE" not in sql:
+            return
+        logger.info("Migrating: dropping UNIQUE constraint on stocks.symbol")
+        conn.execute(text("DROP INDEX ix_stocks_symbol"))
+        conn.execute(text("CREATE INDEX ix_stocks_symbol ON stocks (symbol)"))
 
 
 def get_db():

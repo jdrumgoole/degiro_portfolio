@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] - 2026-05-10
+
+### Fixed
+- **Import crash on stocks sharing a product-name prefix (`UNIQUE constraint failed: stocks.symbol`)**: `Stock.symbol` is a display label derived from the first word of the DEGIRO product name, but the column was declared `UNIQUE`. Two iShares ETFs (or two Vanguard ETFs, etc.) with different ISINs both resolved to the same first word and the second insert failed, aborting the import. Removed the bogus uniqueness — ISIN already uniquely identifies a stock — and added an automatic SQLite migration in `init_db()` that rebuilds the legacy `ix_stocks_symbol` UNIQUE index as a plain index on existing databases at startup.
+
+### Testing
+- **226 tests total**, full parallel suite green. Two new regressions: importing two iShares ETFs that share a derived symbol, and the migration converting a legacy UNIQUE index in place.
+
 ## [0.5.5] - 2026-04-14
 
 ### Fixed
