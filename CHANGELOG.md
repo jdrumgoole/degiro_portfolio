@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2026-05-12
+
+### Fixed
+- **Portfolio chart spikes from Yahoo data glitches**: Yahoo Finance periodically returns a stale/wrong-listing value (e.g. €982.15 on AMUNDI's `0E2B.IL` ticker, recurring across multiple months) for one day before reverting to the real price. These single-day spikes blew up the "Portfolio Total Value Over Time" chart. Added a centered 5-day rolling-median outlier filter to every price write path — rows whose close deviates more than 5× from the local median are dropped at ingestion. New `invoke clean-price-outliers` task (with `--dry-run`) sweeps existing junk rows from the database.
+- **Desktop app `resource_tracker: leaked semaphore` warning on Ctrl-C**: `desktop.py` used `multiprocessing.Process` + `multiprocessing.Event` to run the FastAPI server alongside pywebview. Those allocate POSIX semaphores tracked by the multiprocessing resource_tracker, and an abrupt Ctrl-C interrupted the parent before the tracker could release them. Rewrote the launcher to use `subprocess.Popen([sys.executable, "-m", "uvicorn", …])` — no shared semaphores, no tracker bookkeeping.
+- **Desktop app Ctrl-C now actually exits**: pywebview's native Cocoa/Win32 GUI loop blocks the main thread, so Python signal handlers never dispatch until the user closes the window manually. Wired in the self-pipe trick — `signal.set_wakeup_fd()` plus a worker thread (started via `webview.start(func=…)`) that `select()`s on the signal pipe and calls `window.destroy()` when SIGINT/SIGTERM arrives. Ctrl-C now unwinds the GUI loop and reaches the normal server-shutdown cleanup in ~0.8s.
+- **`INFO:degiro_portfolio.*` log spam**: `ticker_resolver.py` called `logging.basicConfig(level=logging.INFO)` at module import — a library anti-pattern that hijacked the root logger globally, surfacing one INFO line per resolved ISIN. Removed the basicConfig call; libraries should let the application configure logging.
+
+### Added
+- **Documentation link in the web UI header**: small `📖 Documentation` link in the top-right helper area pointing to https://degiro-portfolio.readthedocs.io/.
+
+### Testing
+- **250 tests total** (+10 since v0.5.7): 5 covering `drop_price_outliers` (spike, collapse, threshold, short series, steady series) and 5 covering the desktop subprocess launcher + signal-pipe paths, including a regression test that fails if anyone reintroduces `multiprocessing.Process` / `Event` in `desktop.py`.
+
 ## [0.5.7] - 2026-05-12
 
 ### Fixed

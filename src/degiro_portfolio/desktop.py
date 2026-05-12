@@ -1,63 +1,44 @@
 """Desktop application wrapper using pywebview.
 
-Runs the FastAPI server in a child process and displays it in a native
-window with an embedded browser (WebKit on macOS, WebView2 on Windows).
+Runs the FastAPI server in a child process (via subprocess) and displays it
+in a native window with an embedded browser (WebKit on macOS, WebView2 on
+Windows).
+
+We deliberately avoid `multiprocessing.Process` / `multiprocessing.Event`
+here. On macOS / Linux those allocate POSIX semaphores tracked by
+`multiprocessing.resource_tracker`, and an abrupt Ctrl-C interrupts the
+parent's shutdown before the tracker can release them, producing
+"leaked semaphore objects" warnings at exit. A plain subprocess has no
+such bookkeeping and survives Ctrl-C cleanly.
 """
 
 from __future__ import annotations
 
-import multiprocessing
 import signal
+import subprocess
 import sys
 import time
 import urllib.error
 import urllib.request
 
 
-def _run_server(host: str, port: int, ready_event: multiprocessing.Event) -> None:
-    """Entry point for the server child process."""
-    import asyncio
-    import uvicorn
-
-    # Ignore SIGINT in the child — the parent handles shutdown
-    signal.signal(signal.SIGINT, signal.SIG_IGN)
-
-    config = uvicorn.Config(
-        "degiro_portfolio.main:app",
-        host=host,
-        port=port,
-        reload=False,
-        log_level="warning",
-    )
-    server = uvicorn.Server(config)
-
-    async def _serve() -> None:
-        await server.serve()
-
-    # Signal readiness once the server is accepting connections
-    def _poll_until_ready() -> None:
-        url = f"http://{host}:{port}/api/ping"
-        for _ in range(80):  # up to 20 seconds
+def _wait_for_ready(host: str, port: int, timeout_s: float = 20.0) -> bool:
+    """Poll /api/ping until the server responds or timeout elapses."""
+    url = f"http://{host}:{port}/api/ping"
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        try:
+            urllib.request.urlopen(url, timeout=1)
+            return True
+        except (urllib.error.URLError, ConnectionError, OSError):
             time.sleep(0.25)
-            try:
-                urllib.request.urlopen(url, timeout=1)
-                ready_event.set()
-                return
-            except (urllib.error.URLError, ConnectionError, OSError):
-                continue
-        # Timed out — set anyway so the parent doesn't hang
-        ready_event.set()
-
-    import threading
-    threading.Thread(target=_poll_until_ready, daemon=True).start()
-
-    asyncio.run(_serve())
+    return False
 
 
 def run_desktop(*, port: int = 8000) -> None:
     """Launch DEGIRO Portfolio as a desktop application.
 
-    Starts the FastAPI server in a child process and opens a native
+    Starts the FastAPI server in a child subprocess and opens a native
     window with pywebview pointing at it.
     """
     try:
@@ -83,23 +64,36 @@ def run_desktop(*, port: int = 8000) -> None:
     except OSError:
         print(
             f"Error: port {port} is already in use.\n"
-            f"Use a different port: python -m degiro_portfolio --desktop --port {port + 1}",
+            f"Use a different port: degiro-portfolio-desktop --port {port + 1}",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    # Start the server in a child process
-    ready_event = multiprocessing.Event()
-    server_process = multiprocessing.Process(
-        target=_run_server,
-        args=(host, port, ready_event),
-        daemon=True,
-    )
-    server_process.start()
+    # Start the server in a child subprocess. Using sys.executable + uvicorn
+    # ensures we run inside the same Python environment without depending on
+    # `uv` or `uvicorn` being on PATH.
+    server_cmd = [
+        sys.executable, "-m", "uvicorn",
+        "degiro_portfolio.main:app",
+        "--host", host,
+        "--port", str(port),
+        "--log-level", "warning",
+    ]
+    popen_kwargs: dict = {
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.STDOUT,
+    }
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    else:
+        # New session so SIGINT in our terminal doesn't propagate to the
+        # uvicorn child — we want to shut it down ourselves.
+        popen_kwargs["start_new_session"] = True
+    server_process = subprocess.Popen(server_cmd, **popen_kwargs)
 
     # Wait for the server to be ready
     print(f"Starting DEGIRO Portfolio on {url} ...")
-    if not ready_event.wait(timeout=20):
+    if not _wait_for_ready(host, port):
         print("Warning: server may not be ready yet", file=sys.stderr)
 
     # Create the native window
@@ -123,25 +117,48 @@ def run_desktop(*, port: int = 8000) -> None:
 
     window.events.closing += _on_closing
 
-    # Handle Ctrl-C: close the window which triggers _on_closing
-    def _sigint_handler(signum: int, frame: object) -> None:
+    # Handle Ctrl-C reliably even though pywebview's native GUI loop blocks
+    # the main thread (preventing Python signal handlers from running
+    # promptly). Use the self-pipe trick: signal.set_wakeup_fd causes the
+    # kernel to write the signal number to a pipe on delivery; a worker
+    # thread select()s on the pipe and reacts. window.destroy() is
+    # thread-safe and unblocks webview.start() from the GUI thread.
+    import os
+    import select
+
+    _signal_r, _signal_w = os.pipe()
+    os.set_blocking(_signal_r, False)
+    os.set_blocking(_signal_w, False)
+
+    # Install a no-op handler so set_wakeup_fd actually triggers (Python
+    # only writes to the wakeup fd when a signal has a handler installed,
+    # not when it's SIG_DFL/SIG_IGN).
+    signal.signal(signal.SIGINT, lambda *_: None)
+    signal.signal(signal.SIGTERM, lambda *_: None)
+    signal.set_wakeup_fd(_signal_w)
+
+    def _signal_watcher() -> None:
+        """Block in a worker thread until a signal arrives, then tear down."""
+        select.select([_signal_r], [], [])
         print("\nShutting down...", file=sys.stderr)
+        _on_closing()  # POST /api/shutdown so the server exits cleanly
         try:
             window.destroy()
         except Exception:
             pass
 
-    signal.signal(signal.SIGINT, _sigint_handler)
-
-    # Run the window event loop (blocks until window closes)
-    webview.start()
+    # Run the window event loop (blocks until window closes).
+    # `func` runs in a thread after GUI initialization.
+    webview.start(func=_signal_watcher)
 
     # Clean up the server process
-    if server_process.is_alive():
+    if server_process.poll() is None:
         server_process.terminate()
-        server_process.join(timeout=5)
-        if server_process.is_alive():
+        try:
+            server_process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
             server_process.kill()
+            server_process.wait(timeout=2)
 
     print("DEGIRO Portfolio closed.")
 

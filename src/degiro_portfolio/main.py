@@ -1370,6 +1370,11 @@ def update_market_data(db: Session = Depends(get_db)):
                     errors.append(f"No data available for {stock.name}")
                     continue
 
+                # Drop Yahoo data glitches (single-day price spikes that
+                # revert next session).
+                from .fetch_prices import drop_price_outliers
+                hist = drop_price_outliers(hist, stock_label=stock.name)
+
                 # Add new price records
                 new_prices = 0
                 for date, row in hist.iterrows():

@@ -130,6 +130,56 @@ def demo_setup(c):
     print("\n✅ Demo setup complete! Run 'invoke start' to launch the application.")
 
 
+@task(help={
+    "threshold": "Ratio threshold for the rolling-median outlier filter (default 5.0)",
+    "dry_run": "Report what would be removed without deleting (default False)",
+})
+def clean_price_outliers(c, threshold=5.0, dry_run=False):
+    """Remove single-day price spikes caused by Yahoo data glitches.
+
+    For each stock, computes a centered 5-day rolling median of close prices
+    and deletes rows that deviate by more than `threshold` from the median.
+    """
+    import pandas as pd
+    from src.degiro_portfolio.database import SessionLocal, Stock, StockPrice
+    db = SessionLocal()
+    total_dropped = 0
+    affected_stocks = 0
+    try:
+        for stock in db.query(Stock).order_by(Stock.name).all():
+            rows = (
+                db.query(StockPrice)
+                .filter(StockPrice.stock_id == stock.id, StockPrice.close.isnot(None))
+                .order_by(StockPrice.date)
+                .all()
+            )
+            if len(rows) < 3:
+                continue
+            closes = pd.Series([r.close for r in rows], dtype=float)
+            rolling = closes.rolling(window=5, center=True, min_periods=3).median()
+            safe = rolling.where(rolling > 0)
+            ratio = closes / safe
+            bad_idx = [
+                i for i, r in enumerate(ratio)
+                if pd.notna(r) and (r > threshold or r < 1.0 / threshold)
+            ]
+            if not bad_idx:
+                continue
+            affected_stocks += 1
+            print(f"  {stock.name} ({stock.yahoo_ticker or '-'}): {len(bad_idx)} outlier row(s)")
+            for i in bad_idx:
+                print(f"    {rows[i].date.date()}  close={rows[i].close:.2f}  (median={rolling.iloc[i]:.2f})")
+                if not dry_run:
+                    db.delete(rows[i])
+            total_dropped += len(bad_idx)
+        if not dry_run:
+            db.commit()
+        verb = "Would delete" if dry_run else "Deleted"
+        print(f"\n{verb} {total_dropped} outlier rows across {affected_stocks} stock(s).")
+    finally:
+        db.close()
+
+
 @task
 def purge_data(c):
     """Purge all portfolio data (removes database only) and restart server."""

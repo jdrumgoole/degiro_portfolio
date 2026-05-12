@@ -201,6 +201,79 @@ def test_fetch_stock_prices_handles_exceptions(test_database):
         session.close()
 
 
+def test_drop_price_outliers_drops_single_day_spike():
+    """A single-day spike >5x the surrounding median is dropped."""
+    from degiro_portfolio.fetch_prices import drop_price_outliers
+
+    dates = pd.date_range(start='2025-01-01', periods=10, freq='D')
+    closes = [100.0, 101.0, 102.0, 103.0, 982.0, 104.0, 105.0, 106.0, 107.0, 108.0]
+    df = pd.DataFrame({'close': closes, 'open': closes, 'high': closes, 'low': closes,
+                       'volume': [1000] * 10}, index=dates)
+
+    filtered = drop_price_outliers(df, stock_label='AMUNDI-test')
+
+    assert 982.0 not in filtered['close'].values, "spike was not dropped"
+    assert len(filtered) == 9, f"expected 9 rows after dropping spike, got {len(filtered)}"
+    # Surrounding values are intact
+    for v in [100.0, 101.0, 102.0, 103.0, 104.0, 105.0]:
+        assert v in filtered['close'].values
+
+
+def test_drop_price_outliers_keeps_steady_series():
+    """A clean series (no spikes) passes through untouched."""
+    from degiro_portfolio.fetch_prices import drop_price_outliers
+
+    dates = pd.date_range(start='2025-01-01', periods=20, freq='D')
+    closes = [100.0 + i * 0.5 for i in range(20)]  # gentle drift 100 → 109.5
+    df = pd.DataFrame({'close': closes, 'open': closes, 'high': closes, 'low': closes,
+                       'volume': [1000] * 20}, index=dates)
+
+    filtered = drop_price_outliers(df, stock_label='steady-test')
+
+    assert len(filtered) == 20
+    assert list(filtered['close']) == closes
+
+
+def test_drop_price_outliers_drops_zero_collapse():
+    """A single-day collapse to near-zero is also flagged as an outlier."""
+    from degiro_portfolio.fetch_prices import drop_price_outliers
+
+    dates = pd.date_range(start='2025-01-01', periods=8, freq='D')
+    closes = [100.0, 101.0, 102.0, 0.1, 103.0, 104.0, 105.0, 106.0]
+    df = pd.DataFrame({'close': closes, 'open': closes, 'high': closes, 'low': closes,
+                       'volume': [1000] * 8}, index=dates)
+
+    filtered = drop_price_outliers(df, stock_label='collapse-test')
+
+    assert 0.1 not in filtered['close'].values
+    assert len(filtered) == 7
+
+
+def test_drop_price_outliers_handles_short_series():
+    """Series with fewer than 3 rows is returned unchanged (no rolling window)."""
+    from degiro_portfolio.fetch_prices import drop_price_outliers
+
+    dates = pd.date_range(start='2025-01-01', periods=2, freq='D')
+    df = pd.DataFrame({'close': [100.0, 982.0]}, index=dates)
+
+    filtered = drop_price_outliers(df, stock_label='short-test')
+    assert len(filtered) == 2  # too short to evaluate, pass through
+
+
+def test_drop_price_outliers_respects_custom_threshold():
+    """A larger threshold lets bigger moves through; a smaller one is stricter."""
+    from degiro_portfolio.fetch_prices import drop_price_outliers
+
+    dates = pd.date_range(start='2025-01-01', periods=10, freq='D')
+    # 4x spike — would be dropped by default threshold 5, kept by threshold 10
+    closes = [100.0] * 4 + [400.0] + [100.0] * 5
+    df = pd.DataFrame({'close': closes, 'open': closes, 'high': closes, 'low': closes,
+                       'volume': [1000] * 10}, index=dates)
+
+    assert 400.0 in drop_price_outliers(df, ratio_threshold=10.0)['close'].values
+    assert 400.0 not in drop_price_outliers(df, ratio_threshold=3.0)['close'].values
+
+
 def test_fetch_stock_prices_skips_nan_close_rows(test_database):
     """Intraday rows with NaN close must not be persisted.
 

@@ -26,6 +26,43 @@ YAHOO_FINANCE_OVERRIDE = [
     'ASML.AS',  # ASML - Twelve Data normalizes to US ticker with different prices
 ]
 
+# Default tolerance for the rolling-median outlier filter. A close that
+# deviates by more than this factor from the median of its surrounding 5-day
+# window is treated as a Yahoo data glitch and dropped. Threshold is chosen
+# high enough to allow legitimate 4x single-day moves (post-IPO, takeover
+# pops, biotech catalysts) but catch the >9x AMUNDI-style spikes.
+PRICE_OUTLIER_RATIO_THRESHOLD = 5.0
+
+
+def drop_price_outliers(
+    hist: pd.DataFrame,
+    stock_label: str = "<unknown>",
+    ratio_threshold: float = PRICE_OUTLIER_RATIO_THRESHOLD,
+) -> pd.DataFrame:
+    """Drop rows whose close deviates >ratio_threshold× from the rolling median.
+
+    Yahoo Finance occasionally returns a stale or wrong-listing price for a
+    single day (e.g. a NAV print, or a different venue's value) that returns
+    to the prior baseline the next day. These single-day spikes blow up the
+    portfolio chart. Compute a centered 5-day rolling median and drop rows
+    that sit too far above or below it.
+
+    Returns the filtered DataFrame. Logs a warning if any rows are dropped.
+    """
+    if 'close' not in hist.columns or len(hist) < 3:
+        return hist
+    rolling_median = hist['close'].rolling(window=5, center=True, min_periods=3).median()
+    # Avoid divide-by-zero (a true 0 close is itself anomalous; let it pass through)
+    safe_median = rolling_median.where(rolling_median > 0)
+    ratio = hist['close'] / safe_median
+    bad = ((ratio > ratio_threshold) | (ratio < 1.0 / ratio_threshold)).fillna(False)
+    if bad.any():
+        logger.warning(
+            "Dropping %d outlier price row(s) for %s (close diverged >%.1fx from 5-day median)",
+            int(bad.sum()), stock_label, ratio_threshold,
+        )
+    return hist[~bad]
+
 def get_ticker_for_stock(stock):
     """
     Get Yahoo Finance ticker for a stock.
@@ -168,6 +205,10 @@ def fetch_stock_prices(stock, session, start_date=None, end_date=None):
                     logger.debug("Price currency: %s (DEGIRO uses %s)", actual_currency, stock.currency)
         except Exception:
             pass  # If we can't get currency info, use stock.currency
+
+        # Drop Yahoo data glitches (single-day price spikes that revert next
+        # session — see drop_price_outliers docstring).
+        hist = drop_price_outliers(hist, stock_label=stock.name)
 
         count = 0
         for date, row in hist.iterrows():
