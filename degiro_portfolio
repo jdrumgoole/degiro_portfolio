@@ -24,7 +24,8 @@ PROJECT_ROOT = Path(__file__).parent.absolute()
 PID_FILE = PROJECT_ROOT / ".degiro_portfolio.pid"
 LOG_FILE = PROJECT_ROOT / "degiro_portfolio.log"
 HOST = "0.0.0.0"
-PORT = 8000
+DEFAULT_PORT = 8000
+PORT = DEFAULT_PORT
 
 
 def get_pid():
@@ -208,6 +209,13 @@ Examples:
         help='Command to execute'
     )
 
+    parser.add_argument(
+        '-p', '--port',
+        type=int,
+        default=DEFAULT_PORT,
+        help=f'Port to bind the server to (default: {DEFAULT_PORT})'
+    )
+
     # Handle Ctrl+C
     def signal_handler(sig, frame):
         print("\n\n⚠️  Interrupted")
@@ -221,6 +229,9 @@ Examples:
         return 1
 
     args = parser.parse_args()
+
+    global PORT
+    PORT = args.port
 
     # Execute command
     commands = {

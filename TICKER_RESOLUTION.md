@@ -2,135 +2,161 @@
 
 ## Overview
 
-The DEGIRO Portfolio application now automatically resolves ISIN codes to Yahoo Finance ticker symbols, eliminating the need for manual code updates when importing new stocks.
+The DEGIRO Portfolio application automatically resolves ISIN codes to Yahoo Finance ticker symbols. This works globally — Swedish, Greek, Swiss, UK, Japanese, Polish, Bulgarian, Luxembourg, and the other ~40 markets Yahoo indexes are all supported out of the box, without code changes.
+
+Tickers are resolved during import (or on first price fetch) and cached in the `yahoo_ticker` column of the `stocks` table.
 
 ## How It Works
 
-### 1. During Import
+### Resolution Strategy
 
-When you import transaction data (`example_data.xlsx` or your own `Transactions.xlsx`):
+`resolve_ticker_from_isin()` in `src/degiro_portfolio/ticker_resolver.py` tries strategies in order:
 
-1. The import script (`import_data.py`) extracts stock information including ISIN and currency
-2. For each new stock, the ticker resolver (`ticker_resolver.py`) attempts to automatically determine the Yahoo Finance ticker symbol
-3. The resolved ticker is stored in the database (`yahoo_ticker` column in the `stocks` table)
-4. Future imports of the same stock reuse the stored ticker
+1. **Manual override** — small allowlist (`MANUAL_TICKER_MAPPING`) for stocks where Yahoo's first result is wrong or a specific listing must be pinned.
+2. **Yahoo Finance Search** (`yf.Search(isin)`) — the primary resolver. Yahoo indexes most listed equities and ETFs globally by ISIN. The first equity/ETF/mutual-fund result whose ticker suffix matches the trading currency wins; if no currency match, the ISIN country prefix is used; otherwise the first result.
+3. **Legacy prefix heuristic** — last-resort defensive path for US/NL/DE/FR/IT/ES ISINs, kept for offline / network-flaky environments.
 
-### 2. During Price Fetching
+### Currency → Suffix Preference
 
-When fetching historical prices (`fetch_prices.py`):
+When Yahoo lists the same ISIN on multiple venues (e.g. Stockholm + Stuttgart), the trading currency from your DEGIRO export disambiguates:
 
-1. The script reads the `yahoo_ticker` from the database for each stock
-2. If no ticker is found, it attempts automatic resolution on-the-fly
-3. Successfully resolved tickers are saved to the database for future use
+| Currency | Suffix | Exchange       |
+|----------|--------|----------------|
+| SEK      | `.ST`  | Stockholm      |
+| NOK      | `.OL`  | Oslo           |
+| DKK      | `.CO`  | Copenhagen     |
+| CHF      | `.SW`  | SIX Swiss      |
+| GBP      | `.L`   | London         |
+| JPY      | `.T`   | Tokyo          |
+| PLN      | `.WA`  | Warsaw         |
+| CZK      | `.PR`  | Prague         |
+| HUF      | `.BD`  | Budapest       |
+| TRY      | `.IS`  | Istanbul       |
+| HKD      | `.HK`  | Hong Kong      |
+| AUD      | `.AX`  | Australia      |
+| CAD      | `.TO`  | Toronto        |
+| BRL      | `.SA`  | São Paulo (B3) |
+| INR      | `.NS`  | India NSE      |
+| ILS      | `.TA`  | Tel Aviv       |
+| ZAR      | `.JO`  | Johannesburg   |
+| USD      | *(none)* | US — bare ticker |
 
-### 3. Resolution Strategy
+Full list: see `CURRENCY_TO_SUFFIX` in `ticker_resolver.py`.
 
-The ticker resolver tries multiple strategies in order:
+### Country Prefix → Suffix Fallback
 
-1. **Manual Mapping** - Checks a small fallback list for stocks with known resolution issues
-2. **ISIN-based Resolution** - Attempts to derive the ticker from the ISIN code pattern
-3. **Name-based Resolution** - Extracts potential ticker from the stock name
+When the currency hint is ambiguous (e.g. EUR is shared across Athens, Amsterdam, Paris, Milan, Madrid…), the resolver falls back to the ISIN country prefix:
 
-## Adding Manual Mappings
+`GR` → `.AT` (Athens), `DE` → `.DE`, `FR` → `.PA`, `NL` → `.AS`, `IT` → `.MI`, `ES` → `.MC`, `FI` → `.HE`, `BE` → `.BR`, `PT` → `.LS`, `AT` → `.VI`, `IE` → `.IR`, and so on — covering 40+ ISIN country codes across Europe, Asia/Pacific, the Americas, the Middle East, and Africa.
 
-While the system aims to resolve tickers automatically, some stocks may require manual mapping. To add a manual mapping:
+Full list: see `COUNTRY_TO_SUFFIX` in `ticker_resolver.py`.
 
-1. Open `src/degiro_portfolio/ticker_resolver.py`
-2. Add an entry to the `MANUAL_TICKER_MAPPING` dictionary:
+### Worked Examples
+
+| ISIN          | Currency | Resolved ticker | How                                  |
+|---------------|----------|-----------------|--------------------------------------|
+| SE0015192067  | SEK      | `SAVE.ST`       | Yahoo Search, `.ST` matched currency |
+| GRS469003024  | EUR      | `KRI.AT`        | Yahoo Search, `.AT` matched country  |
+| CH0024608827  | CHF      | `PGHN.SW`       | Yahoo Search, `.SW` matched currency |
+| GB00B1YW4409  | GBP      | `III.L`         | Yahoo Search, `.L` matched currency  |
+| JP3389510003  | JPY      | `6544.T`        | Yahoo Search, `.T` matched currency  |
+| PLATPRT00018  | PLN      | `APR.WA`        | Yahoo Search, `.WA` matched currency |
+| US50155Q1004  | USD      | `KD`            | Yahoo Search (Kyndryl)               |
+| DE0007164600  | EUR      | `SAP.DE`        | Manual override                      |
+| NL0010273215  | EUR      | `ASML.AS`       | Manual override                      |
+
+### When It Runs
+
+- **During import** (`/api/upload-transactions`): for every new stock that ends up with a positive net position, `fetch_stock_prices()` calls the resolver and stores the result.
+- **On Update Market Data** (`/api/update-market-data`): if a stock still has no `yahoo_ticker`, the endpoint resolves it on demand and caches it.
+
+Once resolved, the ticker is persisted in the database and reused on subsequent runs.
+
+## Manual Overrides
+
+For a stock where Yahoo's first result is wrong, or you need to pin a specific listing, add an entry to `MANUAL_TICKER_MAPPING` in `src/degiro_portfolio/ticker_resolver.py`:
 
 ```python
 MANUAL_TICKER_MAPPING: Dict[str, Dict[str, str]] = {
     # ... existing mappings ...
-
-    # Your new stock
-    "YOUR_ISIN_CODE": {"CURRENCY": "TICKER_SYMBOL"},
-
-    # Example:
     "GB0005405286": {"GBP": "HSBA.L"},  # HSBC Holdings - London
 }
 ```
 
+The mapping is checked first, before any network call, and always wins.
+
 ## Database Schema
 
 The `stocks` table includes:
-- `symbol` - Original symbol extracted from transaction data
-- `name` - Full company name
-- `isin` - ISIN code (unique identifier)
-- `exchange` - Exchange from transaction data
-- `currency` - Native trading currency
-- **`yahoo_ticker`** - Resolved Yahoo Finance ticker symbol (nullable)
 
-## Viewing Resolved Tickers
+- `symbol` — display label derived from the first word of the DEGIRO product name
+- `name` — full company name
+- `isin` — ISIN code (unique identifier)
+- `exchange` — exchange code from the DEGIRO transaction
+- `currency` — DEGIRO trading currency
+- **`yahoo_ticker`** — resolved Yahoo Finance ticker (nullable)
 
-To see which tickers have been resolved for your stocks:
+## Inspecting Resolved Tickers
 
 ```bash
-uv run invoke db-info
+uv run python -m invoke db-info
 ```
 
-Or query the database directly:
+Or directly:
 
 ```python
 from src.degiro_portfolio.database import SessionLocal, Stock
 
 session = SessionLocal()
-stocks = session.query(Stock).all()
-
-for stock in stocks:
-    print(f"{stock.name:30} | ISIN: {stock.isin:12} | Ticker: {stock.yahoo_ticker or 'NOT RESOLVED'}")
+for stock in session.query(Stock).all():
+    print(f"{stock.name:40} | ISIN: {stock.isin:14} | "
+          f"Ticker: {stock.yahoo_ticker or 'NOT RESOLVED'}")
 ```
 
 ## Manually Setting a Ticker
 
-If automatic resolution fails, you can manually set the ticker in the database:
+If automatic resolution returns the wrong listing for a specific stock, you can override it directly in the database:
 
 ```python
 from src.degiro_portfolio.database import SessionLocal, Stock
 
 session = SessionLocal()
-
-# Find the stock by ISIN
 stock = session.query(Stock).filter_by(isin="YOUR_ISIN").first()
-
 if stock:
     stock.yahoo_ticker = "TICKER_SYMBOL"
     session.commit()
-    print(f"Updated {stock.name} ticker to {stock.yahoo_ticker}")
 ```
 
-## Benefits
-
-✅ **No Code Changes Required** - Upload any DEGIRO transaction file without modifying code
-✅ **Automatic** - Tickers are resolved and stored during import
-✅ **Persistent** - Once resolved, tickers are cached in the database
-✅ **Fallback Support** - Manual mappings available for edge cases
-✅ **Transparent** - Clear error messages when resolution fails
+For a permanent override that survives database resets, prefer adding the mapping to `MANUAL_TICKER_MAPPING` instead.
 
 ## Troubleshooting
 
-### "No ticker resolved for Stock Name"
+### "Could not automatically resolve ISIN" warning in the logs
 
-This means automatic resolution failed. Options:
+Yahoo Search returned no equity/ETF results for the ISIN. Options:
 
-1. Add a manual mapping to `MANUAL_TICKER_MAPPING` in `ticker_resolver.py`
-2. Manually set the ticker in the database (see above)
-3. Check if the stock trades on Yahoo Finance at all
+1. Verify the stock exists on https://finance.yahoo.com using its ISIN.
+2. Add an entry to `MANUAL_TICKER_MAPPING` with the correct ticker.
+3. Set the ticker directly via the database snippet above.
 
-### "Could not fetch prices for Stock Name"
+### Wrong listing was picked (e.g. Stuttgart instead of Stockholm)
 
-Even with a resolved ticker, price fetching may fail if:
-- The stock is delisted
-- Yahoo Finance doesn't have data for this ticker
-- The ticker symbol is incorrect
+Yahoo returns multiple listings for some ISINs and the currency/country preference didn't disambiguate cleanly. Pin the correct listing with a `MANUAL_TICKER_MAPPING` entry.
 
-Try verifying the ticker manually at https://finance.yahoo.com
+### "No data returned" but the ticker resolved
 
-## Migration from Old System
+The ticker resolved, but the price fetcher returned nothing. Usually means the stock is delisted, regionally restricted, or Yahoo simply has no data for that specific listing. Try the ticker manually on https://finance.yahoo.com to confirm.
 
-If you were using an older version with hard-coded `ISIN_TO_TICKER` mappings:
+## Migration from Older Versions
 
-1. Delete your old database: `rm degiro_portfolio.db`
-2. Re-import your transactions: `uv run invoke import-data`
-3. Fetch prices: `uv run invoke fetch-prices`
+If you upgraded from a release where ticker resolution was limited to US/NL/DE/FR/IT/ES ISINs (so non-Euro European stocks, Asian stocks, etc. had `yahoo_ticker = NULL`), the simplest path is:
 
-The new system will automatically resolve and store tickers for all your stocks.
+```python
+# In a Python shell at the project root
+from src.degiro_portfolio.database import SessionLocal, Stock
+db = SessionLocal()
+db.query(Stock).update({Stock.yahoo_ticker: None})
+db.commit()
+```
+
+Then trigger a market-data refresh from the web UI (or `POST /api/update-market-data`). All held stocks will re-resolve through the new Yahoo Search path. Existing manual overrides are preserved.

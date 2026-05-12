@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.7] - 2026-05-12
+
+### Fixed
+- **Global ISIN → Yahoo ticker resolution**: the previous resolver only recognised US/NL/DE/FR/IT/ES ISIN prefixes and used `f"{ISIN}{suffix}"` candidates that Yahoo Finance doesn't accept. Everything else (Swedish, Greek, Swiss, UK, Japanese, Polish, Bulgarian, Luxembourg, etc.) silently failed, so `yahoo_ticker` stayed NULL and the holdings page showed no prices or charts. Replaced the prefix heuristic with `yf.Search(isin)` as the primary resolver, with a currency-→-suffix preference map (SEK→.ST, CHF→.SW, GBP→.L, JPY→.T, …) and an ISIN-country-→-suffix fallback for ambiguous currencies like EUR. Covers ~30 currencies and ~40 ISIN country codes globally. Kyndryl (US50155Q1004) now resolves to `KD` instead of the raw ISIN.
+- **NULL latest_price masking valid historical close**: Yahoo's `Ticker.history()` returns today's intraday row with NaN OHLC before the close prints; Python's `sqlite3` driver silently stores NaN as NULL. The NULL row was then picked as MAX(date) in `/api/holdings`, hiding yesterday's real close. Now skip NaN-close rows at every write site and filter `close IS NULL` on the read side as defence-in-depth.
+- **`app.version` actually tracks `__version__`**: v0.5.5 claimed to wire `FastAPI(version=…)` to the package version but it stayed a hardcoded string literal. Now imported from `__init__.__version__` so the OpenAPI/Swagger UI version moves in lockstep with `pyproject.toml`.
+
+### Testing
+- **240 tests total**. 14 new ticker-resolver tests cover the Yahoo Search path (currency/country preference, non-equity filtering, exceptions, manual-override precedence, and currency/country map coverage). Two new regression tests cover NaN-close skipping (`fetch_stock_prices`) and NULL-close masking (`/api/holdings`).
+
+### Docs
+- `TICKER_RESOLUTION.md` and `docs/data-providers.md`: documented the new Yahoo Search resolver, currency/country suffix preference, supported markets, manual overrides, and the migration snippet for forcing a re-resolve.
+
+### CI
+- Added `timeout-minutes` to every job in `ci.yml` and `publish.yml`. The default GitHub Actions job timeout is 6h, so a stuck runner on the Playwright install step could silently burn hours before failing. Test jobs now cap at 15 min, build/publish at 10 min, lint at 5 min.
+
 ## [0.5.6] - 2026-05-10
 
 ### Fixed

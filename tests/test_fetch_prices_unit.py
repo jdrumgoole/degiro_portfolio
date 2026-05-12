@@ -201,6 +201,69 @@ def test_fetch_stock_prices_handles_exceptions(test_database):
         session.close()
 
 
+def test_fetch_stock_prices_skips_nan_close_rows(test_database):
+    """Intraday rows with NaN close must not be persisted.
+
+    Yahoo's history() returns today's row with NaN OHLC before the close
+    prints; Python's sqlite3 driver stores NaN as NULL, which would mask
+    the previous valid close in /api/holdings.
+    """
+    from degiro_portfolio.fetch_prices import fetch_stock_prices
+    from degiro_portfolio.database import SessionLocal, Stock, StockPrice
+
+    session = SessionLocal()
+    try:
+        stock = session.query(Stock).filter(Stock.yahoo_ticker.isnot(None)).first()
+        assert stock is not None, "test DB has no stock with a resolved ticker"
+
+        # Pick three unique future dates (no clash with existing rows)
+        d0 = datetime(2099, 1, 1)
+        d1 = datetime(2099, 1, 2)
+        d2 = datetime(2099, 1, 3)
+        # Ensure clean slate
+        session.query(StockPrice).filter(
+            StockPrice.stock_id == stock.id,
+            StockPrice.date.in_([d0, d1, d2]),
+        ).delete(synchronize_session=False)
+        session.commit()
+
+        mock_df = pd.DataFrame({
+            'open':  [100.0,        101.0, float('nan')],
+            'high':  [105.0,        106.0, float('nan')],
+            'low':   [99.0,         98.0,  float('nan')],
+            'close': [103.0,        104.0, float('nan')],  # last row = intraday NaN
+            'volume':[1_000_000, 1_100_000, 210_217],       # volume often valid even when OHLC is NaN
+        }, index=[d0, d1, d2])
+
+        with patch('degiro_portfolio.fetch_prices.get_price_fetcher') as mock_fetcher:
+            mock_instance = MagicMock()
+            mock_instance.fetch_prices.return_value = mock_df
+            mock_fetcher.return_value = mock_instance
+
+            count = fetch_stock_prices(stock, session)
+
+        # Only the two valid rows should have been persisted.
+        assert count == 2, f"expected 2 inserts, got {count}"
+
+        rows = session.query(StockPrice).filter(
+            StockPrice.stock_id == stock.id,
+            StockPrice.date.in_([d0, d1, d2]),
+        ).all()
+        dates_written = sorted(r.date for r in rows)
+        assert dates_written == [d0, d1], "NaN-close row should not have been written"
+        for r in rows:
+            assert r.close is not None, "no row with NULL close should exist"
+
+        # Cleanup
+        session.query(StockPrice).filter(
+            StockPrice.stock_id == stock.id,
+            StockPrice.date.in_([d0, d1, d2]),
+        ).delete(synchronize_session=False)
+        session.commit()
+    finally:
+        session.close()
+
+
 def test_fetch_stock_prices_skips_duplicates(test_database):
     """Test that fetch_stock_prices skips existing price records."""
     from degiro_portfolio.fetch_prices import fetch_stock_prices

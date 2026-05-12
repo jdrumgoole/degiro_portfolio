@@ -42,6 +42,11 @@ myst_enable_extensions = [
     "tasklist",
 ]
 
+# Auto-generate anchor slugs for headings up to depth 3, so intra-doc and
+# cross-doc Markdown links like `[Foo](#foo)` or `[Bar](page.md#bar)` resolve
+# instead of emitting `myst.xref_missing` warnings.
+myst_heading_anchors = 3
+
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 

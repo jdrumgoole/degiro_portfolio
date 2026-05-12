@@ -47,28 +47,32 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent
 
 
-@task
-def start(c):
+@task(help={"port": "Port to bind the server to (default: 8000)"})
+def start(c, port=None):
     """Start the DEGIRO Portfolio server."""
-    c.run("./degiro_portfolio start", pty=True)
+    port_arg = f" --port {port}" if port else ""
+    c.run(f"./degiro_portfolio start{port_arg}", pty=True)
 
 
-@task
-def stop(c):
+@task(help={"port": "Port the server is bound to (default: 8000)"})
+def stop(c, port=None):
     """Stop the Stock Chart server."""
-    c.run("./degiro_portfolio stop", pty=True)
+    port_arg = f" --port {port}" if port else ""
+    c.run(f"./degiro_portfolio stop{port_arg}", pty=True)
 
 
-@task
-def restart(c):
+@task(help={"port": "Port to bind the server to (default: 8000)"})
+def restart(c, port=None):
     """Restart the Stock Chart server."""
-    c.run("./degiro_portfolio restart", pty=True)
+    port_arg = f" --port {port}" if port else ""
+    c.run(f"./degiro_portfolio restart{port_arg}", pty=True)
 
 
-@task
-def status(c):
+@task(help={"port": "Port the server is bound to (default: 8000)"})
+def status(c, port=None):
     """Check server status."""
-    c.run("./degiro_portfolio status", pty=True)
+    port_arg = f" --port {port}" if port else ""
+    c.run(f"./degiro_portfolio status{port_arg}", pty=True)
 
 
 @task
@@ -355,7 +359,7 @@ def install(c):
 def build_docs(c):
     """Build Sphinx documentation."""
     print("📚 Building documentation...")
-    c.run("cd docs && uv run sphinx-build -b html . _build/html", pty=True)
+    c.run("cd docs && uv run sphinx-build -W --keep-going -b html . _build/html", pty=True)
     print("✅ Documentation built in docs/_build/html/")
     print("   Open docs/_build/html/index.html to view")
 

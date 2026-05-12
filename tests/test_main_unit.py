@@ -67,6 +67,70 @@ def test_holdings_structure(client):
         assert "transactions_count" in holding
 
 
+def test_holdings_endpoint_ignores_null_close_rows(client, test_database):
+    """A NULL-close StockPrice at the latest date must not mask the previous valid close.
+
+    Regression for the bug where Yahoo's intraday row (NaN → NULL in sqlite3)
+    was being returned as the latest_price, showing 'no price' in the UI even
+    though valid historical data existed.
+    """
+    from degiro_portfolio.database import SessionLocal, Stock, StockPrice
+    from sqlalchemy import desc
+
+    session = SessionLocal()
+    try:
+        # Pick a stock that already has at least one priced row.
+        stock = (
+            session.query(Stock)
+            .join(StockPrice)
+            .filter(StockPrice.close.isnot(None))
+            .first()
+        )
+        assert stock is not None, "test DB has no priced stocks"
+
+        last_valid = (
+            session.query(StockPrice)
+            .filter(StockPrice.stock_id == stock.id, StockPrice.close.isnot(None))
+            .order_by(desc(StockPrice.date))
+            .first()
+        )
+        future_date = datetime(2099, 6, 1)
+        # Clean slate
+        session.query(StockPrice).filter(
+            StockPrice.stock_id == stock.id, StockPrice.date == future_date
+        ).delete(synchronize_session=False)
+        # Insert a future-dated NULL-close row that would otherwise be picked
+        # as the latest record.
+        bad_row = StockPrice(
+            stock_id=stock.id,
+            date=future_date,
+            open=None, high=None, low=None, close=None, volume=0,
+            currency=stock.currency,
+        )
+        session.add(bad_row)
+        session.commit()
+
+        response = client.get("/api/holdings")
+        assert response.status_code == 200
+        holding = next(
+            (h for h in response.json()["holdings"] if h["id"] == stock.id),
+            None,
+        )
+        assert holding is not None, f"stock {stock.id} not in holdings response"
+        assert holding["latest_price"] == last_valid.close, (
+            f"expected fall-through to prior valid close {last_valid.close}, "
+            f"got {holding['latest_price']}"
+        )
+
+        # Cleanup
+        session.query(StockPrice).filter(
+            StockPrice.stock_id == stock.id, StockPrice.date == future_date
+        ).delete(synchronize_session=False)
+        session.commit()
+    finally:
+        session.close()
+
+
 def test_stock_prices_endpoint(client):
     """Test stock prices API endpoint."""
     response = client.get("/api/stock/1/prices")

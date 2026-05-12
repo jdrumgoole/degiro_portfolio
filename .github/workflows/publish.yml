@@ -10,6 +10,7 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -37,6 +38,7 @@ jobs:
     name: Build Distribution
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -64,6 +66,7 @@ jobs:
     name: Publish to PyPI
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: pypi
       url: https://pypi.org/p/degiro_portfolio
@@ -83,6 +86,7 @@ jobs:
     name: Create GitHub Release
     needs: publish-to-pypi
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write  # Required for creating releases
     steps:

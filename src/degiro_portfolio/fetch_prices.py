@@ -171,6 +171,12 @@ def fetch_stock_prices(stock, session, start_date=None, end_date=None):
 
         count = 0
         for date, row in hist.iterrows():
+            # Skip incomplete intraday rows where Yahoo hasn't published a
+            # close yet. Python's sqlite3 driver coerces NaN to NULL, so
+            # writing these would mask the previous real close.
+            if pd.isna(row['close']):
+                continue
+
             # Check if price already exists for this date
             existing = session.query(StockPrice).filter_by(
                 stock_id=stock.id,
@@ -183,11 +189,11 @@ def fetch_stock_prices(stock, session, start_date=None, end_date=None):
             price = StockPrice(
                 stock_id=stock.id,
                 date=date,
-                open=float(row['open']),
-                high=float(row['high']),
-                low=float(row['low']),
+                open=float(row['open']) if not pd.isna(row['open']) else None,
+                high=float(row['high']) if not pd.isna(row['high']) else None,
+                low=float(row['low']) if not pd.isna(row['low']) else None,
                 close=float(row['close']),
-                volume=int(row['volume']),
+                volume=int(row['volume']) if not pd.isna(row['volume']) else 0,
                 currency=actual_currency  # Store prices in actual exchange currency
             )
             session.add(price)

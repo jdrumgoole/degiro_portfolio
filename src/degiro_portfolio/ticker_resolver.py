@@ -5,7 +5,7 @@ This module provides utilities to automatically resolve ISIN codes to Yahoo Fina
 ticker symbols, eliminating the need for hard-coded mappings.
 """
 import yfinance as yf
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 import logging
 
 # Configure logging
@@ -38,6 +38,131 @@ MANUAL_TICKER_MAPPING: Dict[str, Dict[str, str]] = {
 }
 
 
+# Trading-currency → preferred Yahoo Finance ticker suffix.
+# Used to disambiguate when an ISIN is listed on multiple Yahoo venues.
+CURRENCY_TO_SUFFIX: Dict[str, str] = {
+    # Europe
+    "SEK": ".ST",   # Stockholm
+    "NOK": ".OL",   # Oslo
+    "DKK": ".CO",   # Copenhagen
+    "ISK": ".IC",   # Iceland
+    "CHF": ".SW",   # Swiss / SIX
+    "GBP": ".L",    # London (pounds)
+    "GBp": ".L",    # London (pence)
+    "PLN": ".WA",   # Warsaw
+    "CZK": ".PR",   # Prague
+    "HUF": ".BD",   # Budapest
+    "RON": ".RO",   # Bucharest
+    "TRY": ".IS",   # Istanbul
+    "RUB": ".ME",   # Moscow
+    # Asia / Pacific
+    "JPY": ".T",    # Tokyo
+    "HKD": ".HK",   # Hong Kong
+    "CNY": ".SS",   # Shanghai (Shenzhen also uses .SZ — currency alone can't tell)
+    "KRW": ".KS",   # Korea (KOSPI; KOSDAQ is .KQ)
+    "TWD": ".TW",   # Taiwan
+    "INR": ".NS",   # India NSE (BSE is .BO)
+    "SGD": ".SI",   # Singapore
+    "AUD": ".AX",   # Australia
+    "NZD": ".NZ",   # New Zealand
+    "MYR": ".KL",   # Malaysia
+    "THB": ".BK",   # Thailand
+    "IDR": ".JK",   # Indonesia
+    "PHP": ".PS",   # Philippines
+    "VND": ".VN",   # Vietnam
+    # Americas
+    "CAD": ".TO",   # Toronto (Venture is .V)
+    "MXN": ".MX",   # Mexico
+    "BRL": ".SA",   # Brazil (São Paulo / B3)
+    "ARS": ".BA",   # Argentina
+    "CLP": ".SN",   # Chile
+    # Middle East / Africa
+    "ILS": ".TA",   # Tel Aviv
+    "ZAR": ".JO",   # Johannesburg
+    "SAR": ".SR",   # Saudi (Tadawul)
+    "AED": ".AE",   # UAE
+    "EGP": ".CA",   # Egypt
+    # USD is left unmapped: most US listings have no suffix.
+}
+
+# ISIN country prefix → preferred Yahoo Finance ticker suffix (used as a
+# fallback when the currency hint is ambiguous, e.g. EUR shared across many
+# venues, or unset).
+COUNTRY_TO_SUFFIX: Dict[str, str] = {
+    # Europe (Eurozone)
+    "DE": ".DE", "FR": ".PA", "NL": ".AS",
+    "IT": ".MI", "ES": ".MC", "FI": ".HE",
+    "BE": ".BR", "PT": ".LS", "AT": ".VI",
+    "GR": ".AT", "IE": ".IR",
+    # Europe (non-Euro)
+    "SE": ".ST", "NO": ".OL", "DK": ".CO",
+    "IS": ".IC", "CH": ".SW", "GB": ".L",
+    "PL": ".WA", "CZ": ".PR", "HU": ".BD",
+    "RO": ".RO", "TR": ".IS",
+    # Asia / Pacific
+    "JP": ".T",  "HK": ".HK", "CN": ".SS",
+    "KR": ".KS", "TW": ".TW", "IN": ".NS",
+    "SG": ".SI", "AU": ".AX", "NZ": ".NZ",
+    "MY": ".KL", "TH": ".BK", "ID": ".JK",
+    "PH": ".PS", "VN": ".VN",
+    # Americas
+    "CA": ".TO", "MX": ".MX", "BR": ".SA",
+    "AR": ".BA", "CL": ".SN",
+    # Middle East / Africa
+    "IL": ".TA", "ZA": ".JO", "SA": ".SR",
+    "AE": ".AE", "EG": ".CA",
+    # US: no suffix — Yahoo uses bare ticker (AAPL, MSFT). Omitted intentionally.
+}
+
+
+def _pick_best_search_match(
+    quotes: List[dict],
+    currency: Optional[str] = None,
+    isin: Optional[str] = None,
+) -> Optional[str]:
+    """Pick the best Yahoo Finance Search result for an equity-like instrument.
+
+    Prefers EQUITY/ETF/MUTUALFUND quotes, then a ticker whose suffix matches
+    the trading currency, then the ISIN's country prefix, then falls back to
+    the first candidate.
+    """
+    if not quotes:
+        return None
+
+    candidates = [
+        q for q in quotes
+        if q.get("quoteType") in ("EQUITY", "ETF", "MUTUALFUND")
+    ] or list(quotes)
+
+    preferred_suffix: Optional[str] = None
+    if currency and currency in CURRENCY_TO_SUFFIX:
+        preferred_suffix = CURRENCY_TO_SUFFIX[currency]
+    elif isin and len(isin) >= 2 and isin[:2] in COUNTRY_TO_SUFFIX:
+        preferred_suffix = COUNTRY_TO_SUFFIX[isin[:2]]
+
+    if preferred_suffix:
+        for q in candidates:
+            symbol = q.get("symbol", "")
+            if symbol.endswith(preferred_suffix):
+                return symbol
+
+    return candidates[0].get("symbol")
+
+
+def _search_yahoo(
+    query: str,
+    currency: Optional[str] = None,
+    isin: Optional[str] = None,
+) -> Optional[str]:
+    """Run a Yahoo Finance search and return the best-matching ticker."""
+    try:
+        result = yf.Search(query)
+        return _pick_best_search_match(result.quotes, currency=currency, isin=isin)
+    except Exception as e:
+        logger.debug(f"Yahoo Search for '{query}' failed: {e}")
+        return None
+
+
 def resolve_ticker_from_isin(isin: str, currency: str = None) -> Optional[str]:
     """
     Attempt to automatically resolve an ISIN code to a Yahoo Finance ticker symbol.
@@ -63,24 +188,26 @@ def resolve_ticker_from_isin(isin: str, currency: str = None) -> Optional[str]:
         logger.info(f"Resolved {isin} to {ticker} via manual mapping (default)")
         return ticker
 
-    # Try to resolve automatically using yfinance search
-    # For US stocks, the ticker often matches the last part of the ISIN
-    if isin.startswith("US"):
-        # US ISINs format: US + 9-digit identifier
-        # Try common US stock patterns
-        potential_tickers = _generate_us_ticker_candidates(isin)
-        for ticker in potential_tickers:
-            if _verify_ticker(ticker, isin):
-                logger.info(f"Resolved {isin} to {ticker} via US pattern matching")
-                return ticker
+    # Primary resolver: Yahoo Finance Search. Works globally and returns the
+    # canonical local-exchange ticker (e.g. SAVE.ST, KD, PGHN.SW) rather than
+    # an ISIN-encoded one. Currency/country hints disambiguate when an
+    # instrument is listed on multiple Yahoo venues.
+    ticker = _search_yahoo(isin, currency=currency, isin=isin)
+    if ticker:
+        logger.info(f"Resolved {isin} to {ticker} via Yahoo Finance search")
+        return ticker
 
-    # For European stocks, try common exchange suffixes
+    # Last-resort prefix heuristic (kept for offline / network-flaky cases).
+    if isin.startswith("US"):
+        for candidate in _generate_us_ticker_candidates(isin):
+            if _verify_ticker(candidate, isin):
+                logger.info(f"Resolved {isin} to {candidate} via US pattern matching")
+                return candidate
     elif isin.startswith(("NL", "DE", "FR", "IT", "ES")):
-        potential_tickers = _generate_european_ticker_candidates(isin)
-        for ticker in potential_tickers:
-            if _verify_ticker(ticker, isin):
-                logger.info(f"Resolved {isin} to {ticker} via European pattern matching")
-                return ticker
+        for candidate in _generate_european_ticker_candidates(isin):
+            if _verify_ticker(candidate, isin):
+                logger.info(f"Resolved {isin} to {candidate} via European pattern matching")
+                return candidate
 
     logger.warning(f"Could not automatically resolve ISIN {isin} to ticker symbol")
     return None
@@ -188,6 +315,12 @@ def resolve_ticker_from_name(stock_name: str, currency: str = None) -> Optional[
     if _verify_ticker(potential_ticker):
         logger.info(f"Resolved '{stock_name}' to {potential_ticker} via name extraction")
         return potential_ticker
+
+    # Fallback: Yahoo Finance search by company name.
+    ticker = _search_yahoo(stock_name, currency=currency)
+    if ticker:
+        logger.info(f"Resolved '{stock_name}' to {ticker} via Yahoo Finance search")
+        return ticker
 
     logger.warning(f"Could not resolve ticker from stock name: {stock_name}")
     return None

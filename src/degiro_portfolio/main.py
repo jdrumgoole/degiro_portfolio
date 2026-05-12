@@ -15,6 +15,7 @@ import pandas as pd
 import tempfile
 import yfinance as yf
 
+from . import __version__
 from .database import get_db, Stock, Transaction, StockPrice, Index, IndexPrice, ExchangeRate, init_db
 from .config import Config, get_column
 from .import_data import parse_date
@@ -84,7 +85,7 @@ def ensure_indices_exist(db: Session) -> tuple[int, int]:
     return indices_created, prices_fetched
 
 
-app = FastAPI(title="DEGIRO Portfolio", version="0.5.6")
+app = FastAPI(title="DEGIRO Portfolio", version=__version__)
 
 # Track server start time
 SERVER_START_TIME = datetime.now()
@@ -206,11 +207,17 @@ def get_holdings(db: Session = Depends(get_db)):
     from sqlalchemy import and_
     from sqlalchemy.orm import aliased
 
-    # Subquery to get the latest date for each stock
+    # Subquery to get the latest date for each stock. Exclude rows with a
+    # NULL close (Yahoo can publish an intraday row before the close prints,
+    # which sqlite3 stores as NULL — without this filter such rows would
+    # mask the previous valid close).
     latest_date_subq = db.query(
         StockPrice.stock_id,
         func.max(StockPrice.date).label('max_date')
-    ).filter(StockPrice.stock_id.in_(stock_ids)).group_by(StockPrice.stock_id).subquery()
+    ).filter(
+        StockPrice.stock_id.in_(stock_ids),
+        StockPrice.close.isnot(None),
+    ).group_by(StockPrice.stock_id).subquery()
 
     # Join to get full price records for latest dates
     latest_prices = db.query(StockPrice).join(
@@ -225,12 +232,13 @@ def get_holdings(db: Session = Depends(get_db)):
     latest_price_by_stock = {p.stock_id: p for p in latest_prices}
 
     # Bulk fetch second-latest prices for change calculation
-    # Get the second max date per stock
+    # Get the second max date per stock (also excluding NULL closes)
     second_latest_subq = db.query(
         StockPrice.stock_id,
         func.max(StockPrice.date).label('second_max_date')
     ).filter(
-        StockPrice.stock_id.in_(stock_ids)
+        StockPrice.stock_id.in_(stock_ids),
+        StockPrice.close.isnot(None),
     ).filter(
         ~StockPrice.date.in_(
             db.query(latest_date_subq.c.max_date).filter(
@@ -1365,6 +1373,11 @@ def update_market_data(db: Session = Depends(get_db)):
                 # Add new price records
                 new_prices = 0
                 for date, row in hist.iterrows():
+                    # Skip incomplete intraday rows (NaN close → NULL in
+                    # SQLite, which would mask the previous real close).
+                    if pd.isna(row['close']):
+                        continue
+
                     price_date = date.to_pydatetime().replace(hour=0, minute=0, second=0, microsecond=0)
 
                     # Check if price already exists
@@ -1377,11 +1390,11 @@ def update_market_data(db: Session = Depends(get_db)):
                         price = StockPrice(
                             stock_id=stock.id,
                             date=price_date,
-                            open=float(row['open']),
-                            high=float(row['high']),
-                            low=float(row['low']),
+                            open=float(row['open']) if not pd.isna(row['open']) else None,
+                            high=float(row['high']) if not pd.isna(row['high']) else None,
+                            low=float(row['low']) if not pd.isna(row['low']) else None,
                             close=float(row['close']),
-                            volume=int(row['volume']),
+                            volume=int(row['volume']) if not pd.isna(row['volume']) else 0,
                             currency=stock.currency
                         )
                         db.add(price)

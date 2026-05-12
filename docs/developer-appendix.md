@@ -145,10 +145,10 @@ Get combined data for chart visualization including prices, transactions, positi
 **Response:**
 ```json
 {
-  "prices": [...],
-  "transactions": [...],
-  "position_percentage": [...],
-  "tranches": [...]
+  "prices": [],
+  "transactions": [],
+  "position_percentage": [],
+  "tranches": []
 }
 ```
 

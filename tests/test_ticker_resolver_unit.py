@@ -289,5 +289,178 @@ def test_resolve_ticker_from_name_unresolvable():
     from unittest.mock import patch
 
     with patch('degiro_portfolio.ticker_resolver._verify_ticker', return_value=False):
-        result = resolve_ticker_from_name("TOTALLY FAKE STOCK", "USD")
-        assert result is None
+        with patch('degiro_portfolio.ticker_resolver._search_yahoo', return_value=None):
+            result = resolve_ticker_from_name("TOTALLY FAKE STOCK", "USD")
+            assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Yahoo Finance Search-based resolution (generic ISIN/name lookup)
+# ---------------------------------------------------------------------------
+
+
+def _make_search_mock(quotes):
+    """Build a MagicMock that mimics yf.Search(query).quotes."""
+    result = MagicMock()
+    result.quotes = quotes
+    return MagicMock(return_value=result)
+
+
+def test_pick_best_search_match_prefers_currency_suffix():
+    """Currency hint should pick the matching exchange suffix."""
+    from degiro_portfolio.ticker_resolver import _pick_best_search_match
+
+    quotes = [
+        {"symbol": "SE0015949201.SG", "quoteType": "EQUITY", "exchDisp": "Stuttgart"},
+        {"symbol": "LIFCO-B.ST", "quoteType": "EQUITY", "exchDisp": "Stockholm"},
+    ]
+    # SEK trading currency → prefer .ST
+    assert _pick_best_search_match(quotes, currency="SEK", isin="SE0015949201") == "LIFCO-B.ST"
+
+
+def test_pick_best_search_match_prefers_country_suffix_when_currency_ambiguous():
+    """EUR is ambiguous; fall back to ISIN country prefix."""
+    from degiro_portfolio.ticker_resolver import _pick_best_search_match
+
+    quotes = [
+        {"symbol": "GRSXX.SG", "quoteType": "EQUITY", "exchDisp": "Stuttgart"},
+        {"symbol": "KRI.AT", "quoteType": "EQUITY", "exchDisp": "Athens"},
+    ]
+    # GR ISIN, EUR currency → fall back to country prefix → .AT
+    assert _pick_best_search_match(quotes, currency="EUR", isin="GRS469003024") == "KRI.AT"
+
+
+def test_pick_best_search_match_falls_back_to_first_when_no_preference_match():
+    """When no candidate matches the preferred suffix, return the first one."""
+    from degiro_portfolio.ticker_resolver import _pick_best_search_match
+
+    quotes = [
+        {"symbol": "0E2B.IL", "quoteType": "ETF", "exchDisp": "London IOB"},
+        {"symbol": "OTHER.SG", "quoteType": "MUTUALFUND", "exchDisp": "Stuttgart"},
+    ]
+    # LU has no country suffix mapping, EUR has no currency suffix → first
+    assert _pick_best_search_match(quotes, currency="EUR", isin="LU1190417599") == "0E2B.IL"
+
+
+def test_pick_best_search_match_filters_non_equity_types():
+    """Currencies / indices in the result list should be skipped if equities exist."""
+    from degiro_portfolio.ticker_resolver import _pick_best_search_match
+
+    quotes = [
+        {"symbol": "SEKUSD=X", "quoteType": "CURRENCY"},
+        {"symbol": "^OMXS30", "quoteType": "INDEX"},
+        {"symbol": "SAVE.ST", "quoteType": "EQUITY"},
+    ]
+    assert _pick_best_search_match(quotes, currency="SEK", isin="SE0015192067") == "SAVE.ST"
+
+
+def test_pick_best_search_match_empty_quotes_returns_none():
+    """No quotes → None."""
+    from degiro_portfolio.ticker_resolver import _pick_best_search_match
+    assert _pick_best_search_match([], currency="SEK") is None
+    assert _pick_best_search_match(None, currency="SEK") is None
+
+
+def test_resolve_ticker_from_isin_uses_yahoo_search_for_swedish():
+    """ISINs outside the prefix heuristic should fall back to yf.Search."""
+    from degiro_portfolio.ticker_resolver import resolve_ticker_from_isin
+
+    quotes = [
+        {"symbol": "SE0015192067.SG", "quoteType": "EQUITY"},
+        {"symbol": "SAVE.ST", "quoteType": "EQUITY"},
+    ]
+    with patch('degiro_portfolio.ticker_resolver.yf.Search', _make_search_mock(quotes)):
+        ticker = resolve_ticker_from_isin("SE0015192067", "SEK")
+    assert ticker == "SAVE.ST"
+
+
+def test_resolve_ticker_from_isin_uses_yahoo_search_for_japanese():
+    """Japanese ISIN → .T listing via search."""
+    from degiro_portfolio.ticker_resolver import resolve_ticker_from_isin
+
+    quotes = [{"symbol": "6544.T", "quoteType": "EQUITY"}]
+    with patch('degiro_portfolio.ticker_resolver.yf.Search', _make_search_mock(quotes)):
+        ticker = resolve_ticker_from_isin("JP3389510003", "JPY")
+    assert ticker == "6544.T"
+
+
+def test_resolve_ticker_from_isin_uses_yahoo_search_for_polish():
+    """Polish ISIN → .WA listing via search."""
+    from degiro_portfolio.ticker_resolver import resolve_ticker_from_isin
+
+    quotes = [
+        {"symbol": "APR.DU", "quoteType": "EQUITY"},
+        {"symbol": "APR.WA", "quoteType": "EQUITY"},
+    ]
+    with patch('degiro_portfolio.ticker_resolver.yf.Search', _make_search_mock(quotes)):
+        ticker = resolve_ticker_from_isin("PLATPRT00018", "PLN")
+    assert ticker == "APR.WA"
+
+
+def test_resolve_ticker_from_isin_search_returns_none_on_no_results():
+    """Empty search results should bubble up as None."""
+    from degiro_portfolio.ticker_resolver import resolve_ticker_from_isin
+
+    with patch('degiro_portfolio.ticker_resolver.yf.Search', _make_search_mock([])):
+        ticker = resolve_ticker_from_isin("XX0000000000", "USD")
+    assert ticker is None
+
+
+def test_resolve_ticker_from_isin_search_handles_exceptions():
+    """A network failure during search should not raise."""
+    from degiro_portfolio.ticker_resolver import resolve_ticker_from_isin
+
+    failing = MagicMock(side_effect=Exception("network down"))
+    with patch('degiro_portfolio.ticker_resolver.yf.Search', failing):
+        ticker = resolve_ticker_from_isin("SE0015192067", "SEK")
+    assert ticker is None
+
+
+def test_resolve_ticker_from_name_falls_through_to_yahoo_search():
+    """When first-word verification fails, name search should fire."""
+    from degiro_portfolio.ticker_resolver import resolve_ticker_from_name
+
+    quotes = [{"symbol": "KRI.AT", "quoteType": "EQUITY"}]
+    with patch('degiro_portfolio.ticker_resolver._verify_ticker', return_value=False):
+        with patch('degiro_portfolio.ticker_resolver.yf.Search', _make_search_mock(quotes)):
+            ticker = resolve_ticker_from_name("KRI-KRI MILK INDUSTRY SA", "EUR")
+    assert ticker == "KRI.AT"
+
+
+def test_manual_mapping_short_circuits_yahoo_search():
+    """Manual overrides must win over any search result."""
+    from degiro_portfolio.ticker_resolver import resolve_ticker_from_isin
+
+    # If search ran it would return WRONG.XX, but manual mapping should win.
+    wrong = _make_search_mock([{"symbol": "WRONG.XX", "quoteType": "EQUITY"}])
+    with patch('degiro_portfolio.ticker_resolver.yf.Search', wrong):
+        ticker = resolve_ticker_from_isin("DE0007164600", "EUR")
+    assert ticker == "SAP.DE"
+
+
+def test_currency_suffix_map_covers_major_markets():
+    """Spot-check that the currency map covers the markets we care about."""
+    from degiro_portfolio.ticker_resolver import CURRENCY_TO_SUFFIX
+
+    # European
+    assert CURRENCY_TO_SUFFIX["SEK"] == ".ST"
+    assert CURRENCY_TO_SUFFIX["CHF"] == ".SW"
+    assert CURRENCY_TO_SUFFIX["GBP"] == ".L"
+    # Asia / Pacific
+    assert CURRENCY_TO_SUFFIX["JPY"] == ".T"
+    assert CURRENCY_TO_SUFFIX["HKD"] == ".HK"
+    assert CURRENCY_TO_SUFFIX["AUD"] == ".AX"
+    # Americas
+    assert CURRENCY_TO_SUFFIX["CAD"] == ".TO"
+    assert CURRENCY_TO_SUFFIX["BRL"] == ".SA"
+    # USD intentionally not present (no suffix)
+    assert "USD" not in CURRENCY_TO_SUFFIX
+
+
+def test_country_suffix_map_covers_major_markets():
+    """Spot-check that the country map covers the markets we care about."""
+    from degiro_portfolio.ticker_resolver import COUNTRY_TO_SUFFIX
+
+    for code in ("SE", "NO", "DK", "CH", "GB", "JP", "PL", "DE", "FR",
+                 "NL", "IT", "ES", "AU", "CA", "BR", "HK", "IN"):
+        assert code in COUNTRY_TO_SUFFIX, f"missing country code: {code}"
