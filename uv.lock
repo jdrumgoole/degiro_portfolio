@@ -428,7 +428,7 @@ wheels = [
 
 [[package]]
 name = "degiro-portfolio"
-version = "0.5.10"
+version = "0.5.13"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },

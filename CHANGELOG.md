@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.13] - 2026-05-12
+
+### Docs
+- **Refreshed all four screenshots** from the bundled `example_data.xlsx` demo dataset using a Playwright capture script:
+  - `dashboard-with-buttons.png` now shows the **Portfolio Total Value Over Time** chart (Apr 2024 → May 2026, €0 → €240k) alongside the header buttons and portfolio summary.
+  - `portfolio-overview.png` shows the full top of the dashboard including the value chart and all 11 holdings cards.
+  - `stock-detail-nvidia.png` and `stock-detail-microsoft.png` show the per-stock candlestick price chart, position value %, investment tranches, and the **Performance vs. Market Indices** comparison (stock vs S&P 500 vs Euro Stoxx 50).
+- All screenshots use public-company tickers from the demo dataset — no PII.
+
 ## [0.5.12] - 2026-05-12
 
 ### Fixed
