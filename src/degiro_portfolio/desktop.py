@@ -22,16 +22,56 @@ import urllib.error
 import urllib.request
 
 
-def _wait_for_ready(host: str, port: int, timeout_s: float = 20.0) -> bool:
-    """Poll /api/ping until the server responds or timeout elapses."""
-    url = f"http://{host}:{port}/api/ping"
+def _log(message: str) -> None:
+    """Print a timestamped diagnostic line to stderr."""
+    print(f"[{time.strftime('%H:%M:%S')}] {message}", file=sys.stderr, flush=True)
+
+
+def _probe(url: str, timeout_s: float = 1.0) -> bool:
+    """Return True iff `url` responds with HTTP 2xx within `timeout_s`."""
+    try:
+        with urllib.request.urlopen(url, timeout=timeout_s) as resp:
+            return 200 <= resp.status < 300
+    except (urllib.error.URLError, ConnectionError, OSError):
+        return False
+
+
+def _wait_for_ready(host: str, port: int, timeout_s: float = 30.0) -> bool:
+    """Wait until the server is fully warm before showing the GUI.
+
+    Two phases:
+      1. /api/ping — uvicorn event loop accepting connections.
+      2. /api/holdings — forces FastAPI to fully initialise (SQLAlchemy
+         session factory, pandas / yfinance lazy imports). On first launch
+         after install this is what costs multiple seconds; opening the
+         pywebview window before /api/holdings is warm leaves the embedded
+         WKWebView's initial XHRs stalled and the whole window appears
+         frozen.
+    """
+    ping_url = f"http://{host}:{port}/api/ping"
+    holdings_url = f"http://{host}:{port}/api/holdings"
     deadline = time.monotonic() + timeout_s
+
+    # Phase 1: socket accepting + uvicorn loop alive
+    ping_started = time.monotonic()
     while time.monotonic() < deadline:
-        try:
-            urllib.request.urlopen(url, timeout=1)
+        if _probe(ping_url):
+            _log(f"server accepting connections (uvicorn up) in {time.monotonic() - ping_started:.2f}s")
+            break
+        time.sleep(0.25)
+    else:
+        _log("timed out waiting for /api/ping")
+        return False
+
+    # Phase 2: FastAPI app fully initialised (heavy imports done)
+    holdings_started = time.monotonic()
+    while time.monotonic() < deadline:
+        if _probe(holdings_url, timeout_s=5.0):
+            _log(f"server fully warm (/api/holdings responsive) in {time.monotonic() - holdings_started:.2f}s")
             return True
-        except (urllib.error.URLError, ConnectionError, OSError):
-            time.sleep(0.25)
+        time.sleep(0.25)
+
+    _log("timed out waiting for /api/holdings")
     return False
 
 
@@ -89,13 +129,16 @@ def run_desktop(*, port: int = 8000) -> None:
         # New session so SIGINT in our terminal doesn't propagate to the
         # uvicorn child — we want to shut it down ourselves.
         popen_kwargs["start_new_session"] = True
+    _log(f"spawning server subprocess on {host}:{port}")
     server_process = subprocess.Popen(server_cmd, **popen_kwargs)
+    _log(f"subprocess PID {server_process.pid} started, waiting for readiness")
 
     # Wait for the server to be ready
     print(f"Starting DEGIRO Portfolio on {url} ...")
     if not _wait_for_ready(host, port):
         print("Warning: server may not be ready yet", file=sys.stderr)
 
+    _log("creating pywebview window")
     # Create the native window
     window = webview.create_window(
         "DEGIRO Portfolio",
@@ -147,9 +190,11 @@ def run_desktop(*, port: int = 8000) -> None:
         except Exception:
             pass
 
+    _log("entering pywebview event loop (webview.start)")
     # Run the window event loop (blocks until window closes).
     # `func` runs in a thread after GUI initialization.
     webview.start(func=_signal_watcher)
+    _log("pywebview event loop exited")
 
     # Clean up the server process
     if server_process.poll() is None:

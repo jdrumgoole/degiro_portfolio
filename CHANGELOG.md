@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - 2026-05-12
+
+### Fixed
+- **Desktop app: whole window frozen for several seconds on first launch after install**: on a fresh install the server subprocess has to compile `.pyc` for pandas / SQLAlchemy / yfinance — uvicorn answers `/api/ping` as soon as its event loop is up, but FastAPI's first real request still triggers lazy imports. We were showing the pywebview window during that gap; the embedded WKWebView's initial XHRs stalled and pywebview's pyobjc bridge appeared to hold the Cocoa main thread. Two-phase readiness check now waits for both `/api/ping` (uvicorn alive) and `/api/holdings` (FastAPI fully warm) before opening the window. Subsequent launches are unaffected (≈1.3s warm baseline).
+
+### Added
+- **Startup timing diagnostics** in `desktop.py`: each phase (subprocess spawn, uvicorn readiness, FastAPI readiness, window creation, GUI loop entry/exit) logs a timestamped line to stderr. Helps pinpoint future first-launch regressions.
+
+### Testing
+- **251 tests total** (+1): replaced the `_wait_for_ready` ping-only test with a two-phase variant plus a new regression that fails if only `/api/ping` responds while `/api/holdings` doesn't.
+
 ## [0.5.8] - 2026-05-12
 
 ### Fixed

@@ -96,10 +96,20 @@ def test_run_desktop_uses_subprocess_not_multiprocessing():
         assert "uvicorn" in cmd
 
 
-def test_wait_for_ready_polls_ping_endpoint():
-    """_wait_for_ready returns True when /api/ping responds."""
+def _ok_response_mock(status: int = 200):
+    """Build a context-manager-capable mock of urllib's HTTPResponse."""
+    resp = MagicMock()
+    resp.status = status
+    cm = MagicMock()
+    cm.__enter__.return_value = resp
+    cm.__exit__.return_value = False
+    return cm
+
+
+def test_wait_for_ready_polls_both_ping_and_holdings():
+    """_wait_for_ready returns True when both /api/ping and /api/holdings respond."""
     from degiro_portfolio.desktop import _wait_for_ready
-    with patch('urllib.request.urlopen', return_value=MagicMock()):
+    with patch('urllib.request.urlopen', return_value=_ok_response_mock(200)):
         assert _wait_for_ready("127.0.0.1", 8000, timeout_s=1.0) is True
 
 
@@ -109,3 +119,18 @@ def test_wait_for_ready_times_out_when_server_never_responds():
     from degiro_portfolio.desktop import _wait_for_ready
     with patch('urllib.request.urlopen', side_effect=urllib.error.URLError("nope")):
         assert _wait_for_ready("127.0.0.1", 8000, timeout_s=0.5) is False
+
+
+def test_wait_for_ready_times_out_when_only_ping_responds():
+    """If /api/ping succeeds but /api/holdings never does, return False."""
+    import urllib.error
+    from degiro_portfolio.desktop import _wait_for_ready
+
+    def fake_urlopen(req, timeout=1):
+        url = req if isinstance(req, str) else req.full_url
+        if url.endswith("/api/ping"):
+            return _ok_response_mock(200)
+        raise urllib.error.URLError("holdings down")
+
+    with patch('urllib.request.urlopen', side_effect=fake_urlopen):
+        assert _wait_for_ready("127.0.0.1", 8000, timeout_s=0.6) is False
