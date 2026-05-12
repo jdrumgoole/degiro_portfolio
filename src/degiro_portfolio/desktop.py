@@ -14,6 +14,7 @@ such bookkeeping and survives Ctrl-C cleanly.
 
 from __future__ import annotations
 
+import os
 import signal
 import subprocess
 import sys
@@ -22,9 +23,171 @@ import urllib.error
 import urllib.request
 
 
+APP_NAME = "DEGIRO Portfolio"
+
+
 def _log(message: str) -> None:
     """Print a timestamped diagnostic line to stderr."""
     print(f"[{time.strftime('%H:%M:%S')}] {message}", file=sys.stderr, flush=True)
+
+
+def _icon_path() -> "str | None":
+    """Return the absolute path to the bundled app icon, if present.
+
+    Prefer the squircle-clipped variant so the dock doesn't show sharp
+    corners on macOS Big Sur+. Fall back to the flat 256×256 PNG.
+    """
+    from pathlib import Path
+    static = Path(__file__).parent / "static"
+    for name in ("icon-256-rounded.png", "icon-256.png"):
+        candidate = static / name
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+def _ensure_macos_app_bundle() -> "str | None":
+    """Create a minimal .app bundle under ~/Library/Application Support and
+    return the path to the bundled executable symlink, or None if not on
+    macOS / not possible.
+
+    Why: re-execing through a bundle gives the app a proper Info.plist
+    context, which gets us:
+      - menu bar reads "DEGIRO Portfolio" (CFBundleName)
+      - Activity Monitor / Force Quit show "DEGIRO Portfolio"
+        (NSProcessInfo.processName works once NSBundle has bundle context)
+      - app identity in the bundle is set correctly for NSBundle queries
+
+    KNOWN LIMITATION — the Dock hover tooltip still shows "python3.10":
+    macOS records the *resolved* binary path at exec time, and our bundle
+    executable is a symlink to the pyenv python binary. After symlink
+    resolution the kernel sees "python3.10". Neither CFBundleName nor
+    NSProcessInfo.processName overrides this for the Dock tooltip. The
+    only fixes are (a) ship a compiled C launcher named "DEGIRO Portfolio"
+    that dlopen's libpython directly, or (b) ship a full py2app/briefcase
+    bundle. Both are out of scope for a pip-installed package.
+    """
+    if sys.platform != "darwin":
+        return None
+    from pathlib import Path
+    bundle_root = Path.home() / "Library" / "Application Support" / APP_NAME / f"{APP_NAME}.app"
+    macos_dir = bundle_root / "Contents" / "MacOS"
+    plist_path = bundle_root / "Contents" / "Info.plist"
+    exec_path = macos_dir / APP_NAME
+
+    try:
+        macos_dir.mkdir(parents=True, exist_ok=True)
+        # Always refresh the symlink — sys.executable can change between
+        # virtualenvs / Python upgrades, and a stale symlink to a deleted
+        # interpreter would re-exec into nothing.
+        target = Path(sys.executable).resolve()
+        if exec_path.is_symlink() or exec_path.exists():
+            if not exec_path.is_symlink() or Path(os.readlink(exec_path)).resolve() != target:
+                exec_path.unlink()
+        if not exec_path.exists():
+            exec_path.symlink_to(target)
+        if not plist_path.exists():
+            plist_path.write_text(
+                '<?xml version="1.0" encoding="UTF-8"?>\n'
+                '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
+                '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
+                '<plist version="1.0">\n'
+                '<dict>\n'
+                f'    <key>CFBundleName</key><string>{APP_NAME}</string>\n'
+                f'    <key>CFBundleDisplayName</key><string>{APP_NAME}</string>\n'
+                f'    <key>CFBundleExecutable</key><string>{APP_NAME}</string>\n'
+                '    <key>CFBundleIdentifier</key><string>com.degiro.portfolio</string>\n'
+                '    <key>CFBundlePackageType</key><string>APPL</string>\n'
+                '    <key>CFBundleVersion</key><string>1.0</string>\n'
+                '    <key>NSHighResolutionCapable</key><true/>\n'
+                '</dict>\n'
+                '</plist>\n'
+            )
+        return str(exec_path)
+    except Exception as e:
+        _log(f"bundle creation failed: {e}")
+        return None
+
+
+def _reexec_via_macos_bundle_if_needed() -> None:
+    """If we're not already running from inside the .app bundle, re-exec
+    through it so NSApp picks up the bundled Info.plist (and thus the
+    proper Dock tooltip and identity).
+
+    Guarded by an env var to prevent recursion if the re-exec itself fails
+    or if something goes wrong with the bundle.
+    """
+    if sys.platform != "darwin":
+        return
+    if os.environ.get("_DEGIRO_BUNDLED") == "1":
+        return  # already inside the bundle, no further re-exec
+
+    exec_path = _ensure_macos_app_bundle()
+    if not exec_path:
+        return
+
+    # Recursion guard is purely the env var — the bundle symlink resolves
+    # to the same underlying python binary as sys.executable, so a path
+    # comparison would always say "same" and the re-exec would be skipped.
+    os.environ["_DEGIRO_BUNDLED"] = "1"
+    # argv[0] becomes the bundle path so macOS records the bundle as the
+    # executable. Subsequent argv entries preserve user-supplied flags.
+    new_argv = [exec_path] + sys.argv
+    os.execv(exec_path, new_argv)
+
+
+def _set_macos_bundle_name() -> None:
+    """Override the app name shown in the menu bar, Dock tooltip, and
+    Activity Monitor / Force Quit dialog.
+
+    Three knobs need to be set in lockstep on a non-bundled Python app:
+      - CFBundleName / CFBundleDisplayName: drive the menu-bar name.
+      - NSProcessInfo.processName: drives the Dock tooltip and Activity
+        Monitor entry (without this they fall back to "python3.10").
+    """
+    if sys.platform != "darwin":
+        return
+    try:
+        from Foundation import NSBundle, NSProcessInfo
+    except ImportError:
+        _log("Foundation unavailable, skipping menu-bar name override")
+        return
+    try:
+        info = NSBundle.mainBundle().infoDictionary()
+        info["CFBundleName"] = APP_NAME
+        info["CFBundleDisplayName"] = APP_NAME
+    except Exception as e:
+        _log(f"failed to set CFBundleName: {e}")
+    try:
+        NSProcessInfo.processInfo().setProcessName_(APP_NAME)
+    except Exception as e:
+        _log(f"failed to set process name: {e}")
+
+
+def _set_macos_dock_icon(icon_file: "str | None") -> None:
+    """Apply `icon_file` as the dock icon for this process.
+
+    Must be called *after* pywebview has set up NSApplication (otherwise
+    pywebview's internal init overwrites the icon with macOS's default).
+    Hook this to `window.events.shown` so it runs on the GUI thread once
+    the window is visible.
+    """
+    if sys.platform != "darwin" or not icon_file:
+        return
+    try:
+        from AppKit import NSApplication, NSImage
+    except ImportError:
+        _log("AppKit unavailable, skipping dock icon")
+        return
+    try:
+        image = NSImage.alloc().initWithContentsOfFile_(icon_file)
+        if image is None:
+            _log(f"NSImage failed to load icon at {icon_file}")
+            return
+        NSApplication.sharedApplication().setApplicationIconImage_(image)
+        _log(f"dock icon set from {icon_file}")
+    except Exception as e:
+        _log(f"failed to set dock icon: {e}")
 
 
 def _probe(url: str, timeout_s: float = 1.0) -> bool:
@@ -138,10 +301,14 @@ def run_desktop(*, port: int = 8000) -> None:
     if not _wait_for_ready(host, port):
         print("Warning: server may not be ready yet", file=sys.stderr)
 
+    # Menu-bar name: must be set before NSApplication is referenced, so it
+    # goes here, before webview.create_window.
+    _set_macos_bundle_name()
+
     _log("creating pywebview window")
     # Create the native window
     window = webview.create_window(
-        "DEGIRO Portfolio",
+        APP_NAME,
         url,
         width=1280,
         height=900,
@@ -160,13 +327,20 @@ def run_desktop(*, port: int = 8000) -> None:
 
     window.events.closing += _on_closing
 
+    # Re-apply the dock icon after pywebview has set up NSApplication.
+    # Setting it before webview.start() runs gets overwritten by pywebview's
+    # internal init; events.shown fires after the window is visible and
+    # NSApp is stable.
+    icon_file = _icon_path()
+    if icon_file:
+        window.events.shown += lambda: _set_macos_dock_icon(icon_file)
+
     # Handle Ctrl-C reliably even though pywebview's native GUI loop blocks
     # the main thread (preventing Python signal handlers from running
     # promptly). Use the self-pipe trick: signal.set_wakeup_fd causes the
     # kernel to write the signal number to a pipe on delivery; a worker
     # thread select()s on the pipe and reacts. window.destroy() is
     # thread-safe and unblocks webview.start() from the GUI thread.
-    import os
     import select
 
     _signal_r, _signal_w = os.pipe()
@@ -210,6 +384,13 @@ def run_desktop(*, port: int = 8000) -> None:
 
 def main() -> None:
     """Entry point for the degiro-portfolio-desktop command."""
+    # Re-exec through a .app bundle on macOS so the Dock tooltip and other
+    # identity strings come from a real Info.plist instead of "python3.10".
+    # This MUST run before any other initialization (no imports of webview,
+    # no logging, no NSApplication references) because os.execv replaces
+    # the entire process image.
+    _reexec_via_macos_bundle_if_needed()
+
     import argparse
     parser = argparse.ArgumentParser(description="DEGIRO Portfolio Desktop")
     parser.add_argument(

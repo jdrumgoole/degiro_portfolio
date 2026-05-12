@@ -106,6 +106,101 @@ def _ok_response_mock(status: int = 200):
     return cm
 
 
+def test_icon_path_returns_bundled_icon():
+    """_icon_path() should resolve to a bundled icon (rounded preferred)."""
+    from degiro_portfolio.desktop import _icon_path
+    import os
+    p = _icon_path()
+    assert p is not None, "bundled icon not found"
+    assert os.path.exists(p)
+    # Prefer the squircle-clipped variant; fall back to the flat PNG.
+    assert p.endswith(("icon-256-rounded.png", "icon-256.png"))
+
+
+def test_icon_path_prefers_rounded_over_flat():
+    """When both icons exist, the rounded variant is chosen."""
+    from degiro_portfolio.desktop import _icon_path
+    p = _icon_path()
+    # The rounded variant is shipped in v0.5.10+; if it exists, it should win.
+    import os
+    static_dir = os.path.dirname(p)
+    if os.path.exists(os.path.join(static_dir, "icon-256-rounded.png")):
+        assert p.endswith("icon-256-rounded.png")
+
+
+def test_branding_helpers_noop_on_non_darwin():
+    """On linux/windows, both helpers must do nothing and not crash."""
+    from degiro_portfolio.desktop import _set_macos_bundle_name, _set_macos_dock_icon
+    with patch('sys.platform', 'linux'):
+        _set_macos_bundle_name()
+        _set_macos_dock_icon("/some/icon.png")
+
+
+def test_set_macos_bundle_name_overrides_cf_bundle_name():
+    """On darwin, _set_macos_bundle_name should mutate CFBundleName in infoDictionary."""
+    from contextlib import ExitStack
+
+    info_dict: dict = {}
+    bundle = MagicMock()
+    bundle.infoDictionary.return_value = info_dict
+    ns_bundle_class = MagicMock()
+    ns_bundle_class.mainBundle.return_value = bundle
+    foundation = MagicMock(NSBundle=ns_bundle_class)
+
+    with ExitStack() as stack:
+        stack.enter_context(patch('sys.platform', 'darwin'))
+        stack.enter_context(patch.dict('sys.modules', {'Foundation': foundation}))
+
+        from degiro_portfolio.desktop import _set_macos_bundle_name
+        _set_macos_bundle_name()
+
+    assert info_dict.get("CFBundleName") == "DEGIRO Portfolio"
+    assert info_dict.get("CFBundleDisplayName") == "DEGIRO Portfolio"
+
+
+def test_set_macos_dock_icon_calls_setApplicationIconImage():
+    """On darwin, _set_macos_dock_icon should load the image and apply it."""
+    from contextlib import ExitStack
+
+    ns_app_instance = MagicMock()
+    ns_app_class = MagicMock()
+    ns_app_class.sharedApplication.return_value = ns_app_instance
+    fake_image = MagicMock()
+    ns_image_class = MagicMock()
+    ns_image_class.alloc.return_value.initWithContentsOfFile_.return_value = fake_image
+    appkit = MagicMock(NSApplication=ns_app_class, NSImage=ns_image_class)
+
+    with ExitStack() as stack:
+        stack.enter_context(patch('sys.platform', 'darwin'))
+        stack.enter_context(patch.dict('sys.modules', {'AppKit': appkit}))
+
+        from degiro_portfolio.desktop import _set_macos_dock_icon
+        _set_macos_dock_icon("/some/icon.png")
+
+    ns_app_instance.setApplicationIconImage_.assert_called_once_with(fake_image)
+
+
+def test_set_macos_dock_icon_skips_when_image_load_fails():
+    """If NSImage returns None, setApplicationIconImage_ must NOT be called."""
+    from contextlib import ExitStack
+
+    ns_app_instance = MagicMock()
+    ns_app_class = MagicMock()
+    ns_app_class.sharedApplication.return_value = ns_app_instance
+    ns_image_class = MagicMock()
+    ns_image_class.alloc.return_value.initWithContentsOfFile_.return_value = None  # load fails
+    appkit = MagicMock(NSApplication=ns_app_class, NSImage=ns_image_class)
+
+    with ExitStack() as stack:
+        stack.enter_context(patch('sys.platform', 'darwin'))
+        stack.enter_context(patch.dict('sys.modules', {'AppKit': appkit}))
+
+        from degiro_portfolio.desktop import _set_macos_dock_icon
+        _set_macos_dock_icon("/bogus.png")
+
+    ns_app_instance.setApplicationIconImage_.assert_not_called()
+
+
 def test_wait_for_ready_polls_both_ping_and_holdings():
     """_wait_for_ready returns True when both /api/ping and /api/holdings respond."""
     from degiro_portfolio.desktop import _wait_for_ready

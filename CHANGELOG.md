@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.10] - 2026-05-12
+
+### Added
+- **Desktop app branding on macOS**: menu bar, Activity Monitor, and Force Quit dialog now show "DEGIRO Portfolio" instead of "Python". On first launch the app creates a minimal `.app` bundle at `~/Library/Application Support/DEGIRO Portfolio/DEGIRO Portfolio.app/` (with a symlink to the Python interpreter and an `Info.plist` containing `CFBundleName`) and `os.execv`s through it so `NSBundle.mainBundle` resolves to a real Info.plist. `NSProcessInfo.processName` is set in lockstep so the process name in Activity Monitor matches.
+- **Rounded squircle dock icon**: shipped `icon-256-rounded.png` with an 18%-radius corner mask (macOS Big Sur+ icon shape). `setApplicationIconImage_` is now called from `window.events.shown` (after pywebview has finalized NSApplication) so it isn't overwritten during pywebview's init.
+
+### Known limitation
+- The macOS Dock hover tooltip still reads `python3.10`. After `os.execv`, the kernel records the *resolved* binary path (pyenv's python3.10) and the Dock reads its tooltip from there — neither `CFBundleName` nor `NSProcessInfo.processName` can override it. Fixing this for real requires shipping a compiled launcher binary or moving to a py2app/briefcase build, both out of scope for a pip-installed package.
+
+### Testing
+- **257 tests total** (+6): bundled icon path selection (rounded preferred), no-op behaviour of macOS branding helpers on non-Darwin platforms, mocked `_set_macos_bundle_name` writes to CFBundleName/CFBundleDisplayName, mocked `_set_macos_dock_icon` calls `setApplicationIconImage_`, and the failure path when `NSImage` returns `None`.
+
 ## [0.5.9] - 2026-05-12
 
 ### Fixed
