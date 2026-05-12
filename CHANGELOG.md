@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.12] - 2026-05-12
+
+### Fixed
+- **Read the Docs build failing since v0.5.7** (and breaking the docs badge on PyPI / GitHub): `docs/_static/` and `docs/_templates/` were empty directories referenced by `conf.py`'s `html_static_path` / `templates_path`. Git doesn't track empty directories, so RTD's fresh clone lacked them entirely, triggering Sphinx's `html_static_path entry '_static' does not exist` warning. Combined with the v0.5.7 tightening to `fail_on_warning: true`, that warning failed every RTD build. Added `.gitkeep` placeholders so the directories travel with the repo. Local builds were unaffected because the empty dirs already exist on the dev machine.
+
 ## [0.5.11] - 2026-05-12
 
 ### Fixed
