@@ -23,6 +23,14 @@ from .fetch_prices import fetch_stock_prices
 from .price_fetchers import get_price_fetcher, yahoo_rate_limiter
 
 logger = logging.getLogger(__name__)
+
+# Suppress chatty INFO output from our own modules (ticker resolution per
+# ISIN, import progress, etc.) unless the user explicitly raises the level
+# via DEGIRO_LOG_LEVEL. Uvicorn's own access log is unaffected.
+_app_log_level = os.environ.get("DEGIRO_LOG_LEVEL", "WARNING").upper()
+for _name in ("degiro_portfolio", "src.degiro_portfolio"):
+    logging.getLogger(_name).setLevel(_app_log_level)
+
 from .ticker_resolver import resolve_ticker_from_isin
 
 # Market indices to track
@@ -316,7 +324,11 @@ def get_exchange_rates(db: Session = Depends(get_db)):
     Only fetches from Yahoo Finance if rates are missing or stale.
     """
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    currencies = ["USD", "GBP", "SEK"]
+    # Always include the historical core set (USD/GBP/SEK) plus every
+    # non-EUR currency that any holding uses. This way new stocks in CHF,
+    # JPY, PLN, BGN etc. don't silently fall back to "1.0" (= treating
+    # the foreign price as EUR, which causes portfolio-value spikes).
+    currencies = {"USD", "GBP", "SEK"} | _get_active_currencies(db)
     rates = {"EUR": 1.0}
     need_fetch = []
 
@@ -333,20 +345,23 @@ def get_exchange_rates(db: Session = Depends(get_db)):
         else:
             need_fetch.append(currency)
 
-    # Fetch missing rates from Yahoo Finance
+    # Fetch missing rates from Yahoo Finance — pair tickers follow the
+    # `<from><to>=X` pattern, so we can build symbols dynamically.
     if need_fetch:
-        yahoo_symbols = {
-            "USD": "USDEUR=X",
-            "GBP": "GBPEUR=X",
-            "SEK": "SEKEUR=X"
-        }
-
+        # GBp / GBX are British pence — Yahoo has no proper symbol for them
+        # (`GBXEUR=X` returns the GBP rate, off by 100×). Always derive from
+        # GBP/100 instead. Make sure GBP is fetched first so we have it.
+        pence_aliases = [c for c in need_fetch if c in ("GBp", "GBX")]
+        for p in pence_aliases:
+            need_fetch.remove(p)
+        if pence_aliases and "GBP" not in need_fetch and "GBP" not in rates:
+            need_fetch.append("GBP")
         for currency in need_fetch:
             try:
                 # Apply rate limiting before Yahoo call
                 yahoo_rate_limiter.wait_if_needed()
 
-                ticker = yf.Ticker(yahoo_symbols[currency])
+                ticker = yf.Ticker(f"{currency}EUR=X")
                 hist = ticker.history(period='5d')  # Get 5 days in case of weekends/holidays
                 if not hist.empty:
                     rate = float(hist['Close'].iloc[-1])
@@ -369,6 +384,19 @@ def get_exchange_rates(db: Session = Depends(get_db)):
                     yahoo_rate_limiter.report_rate_limit()
                 rates[currency] = _get_fallback_rate(currency)
 
+        # Derive pence aliases from the fetched GBP rate (Yahoo has no
+        # working symbol for these — see above).
+        gbp_rate = rates.get("GBP", _get_fallback_rate("GBP"))
+        for alias in pence_aliases:
+            rates[alias] = gbp_rate / 100.0
+            # Cache so we don't re-derive on every call
+            db.add(ExchangeRate(
+                date=today,
+                from_currency=alias,
+                to_currency="EUR",
+                rate=rates[alias],
+            ))
+
         try:
             db.commit()
         except Exception:
@@ -381,14 +409,98 @@ def get_exchange_rates(db: Session = Depends(get_db)):
     }
 
 
+# Static fallback FX rates (local → EUR). Used when Yahoo Finance is
+# unreachable or returns no data for a currency. Approximations from
+# early 2026; ±5% drift is fine since these are only used as a safety net.
+_FALLBACK_FX = {
+    # Europe
+    "USD": 0.85,   "GBP": 1.18,
+    # London stocks priced in pence (GBp / GBX). Both spellings appear in
+    # yfinance: `ticker.info['currency']` returns "GBp", while some downstream
+    # libraries normalise it to "GBX". 1 pence = 0.01 GBP.
+    "GBp": 0.0118, "GBX": 0.0118,
+    "CHF": 1.06,   "SEK": 0.093,  "NOK": 0.085,
+    "DKK": 0.134,  "ISK": 0.0067,
+    "PLN": 0.23,   "CZK": 0.040,  "HUF": 0.0025,
+    "RON": 0.20,   "BGN": 0.5113, # BGN is pegged to EUR at 1.95583
+    "TRY": 0.029,  "RUB": 0.0095,
+    # Asia / Pacific
+    "JPY": 0.0057, "HKD": 0.10,   "CNY": 0.12,
+    "KRW": 0.00063,"TWD": 0.027,  "INR": 0.010,
+    "SGD": 0.63,   "AUD": 0.55,   "NZD": 0.52,
+    "MYR": 0.18,   "THB": 0.024,  "IDR": 0.000051,
+    "PHP": 0.014,
+    # Americas
+    "CAD": 0.61,   "MXN": 0.045,  "BRL": 0.16,
+    "ARS": 0.0009, "CLP": 0.00091,
+    # Middle East / Africa
+    "ILS": 0.23,   "ZAR": 0.046,  "SAR": 0.23,
+    "AED": 0.23,   "EGP": 0.017,
+}
+
+
 def _get_fallback_rate(currency: str) -> float:
-    """Get fallback exchange rate for a currency."""
-    fallbacks = {
-        "USD": 0.85,
-        "SEK": 0.093,
-        "GBP": 1.18
-    }
-    return fallbacks.get(currency, 1.0)
+    """Return a static EUR fallback rate when Yahoo is unreachable.
+
+    Returns 1.0 only for EUR itself; everything else maps to a real
+    approximation so unknown currencies don't silently inflate portfolio
+    totals by being passed through as if they were EUR.
+    """
+    if currency == "EUR":
+        return 1.0
+    return _FALLBACK_FX.get(currency, 1.0)
+
+
+def _compute_price_scales(db: Session, stock_ids: "set[int]") -> "dict[int, float]":
+    """Infer the price-quote scale per stock from transaction data.
+
+    Stocks: `value_eur ≈ quantity × price` so scale = 1.0.
+    Bonds:  DEGIRO quotes price as percent of face value (e.g. 103.49 means
+            103.49% of par), so `value_eur ≈ quantity × price × 0.01` and
+            scale = 0.01.
+
+    Returns {stock_id: scale}, defaulting to 1.0 for any stock without
+    informative transactions.
+    """
+    scales: "dict[int, float]" = {}
+    if not stock_ids:
+        return scales
+    from collections import defaultdict as _dd
+    txs = db.query(Transaction).filter(Transaction.stock_id.in_(stock_ids)).all()
+    by_stock: "dict[int, list]" = _dd(list)
+    for t in txs:
+        by_stock[t.stock_id].append(t)
+    for stock_id in stock_ids:
+        scale = 1.0
+        for t in by_stock.get(stock_id, []):
+            if t.quantity and t.price and t.value_eur:
+                expected = abs(t.quantity * t.price)
+                actual = abs(t.value_eur)
+                if expected > 0:
+                    ratio = actual / expected
+                    if 0.005 < ratio < 0.02:
+                        scale = 0.01
+                        break  # one informative transaction is enough
+        scales[stock_id] = scale
+    return scales
+
+
+def _get_active_currencies(db: Session) -> "set[str]":
+    """Return the set of non-EUR currencies held in the portfolio.
+
+    Drives which FX rates the app needs to fetch and cache. Looks at both
+    `Stock.currency` (DEGIRO transaction currency) and `StockPrice.currency`
+    (the actual exchange currency, which can differ — e.g. a stock
+    transacted in EUR but priced in GBP on Yahoo).
+    """
+    rows = set()
+    for (c,) in db.query(Stock.currency).distinct():
+        if c and c != "EUR":
+            rows.add(c)
+    for (c,) in db.query(StockPrice.currency).distinct():
+        if c and c != "EUR":
+            rows.add(c)
+    return rows
 
 
 @app.get("/api/stock/{stock_id}/prices")
@@ -683,6 +795,10 @@ def get_portfolio_summary(db: Session = Depends(get_db)):
     for r in rates:
         exchange_rates_map[r.from_currency] = r.rate
 
+    # Detect percent-of-face quotes (bonds) so 1000-unit holdings priced at
+    # 103.49 contribute €1,034.90 rather than €103,490.
+    price_scales = _compute_price_scales(db, set(stock_ids))
+
     # Compute current value
     current_value = 0.0
     for stock, qty in holdings_query:
@@ -690,7 +806,8 @@ def get_portfolio_summary(db: Session = Depends(get_db)):
         if price_record and price_record.close:
             currency = price_record.currency or stock.currency
             rate = exchange_rates_map.get(currency, _get_fallback_rate(currency))
-            price_eur = price_record.close * rate
+            scaled = price_record.close * price_scales.get(stock.id, 1.0)
+            price_eur = scaled * rate
             current_value += int(qty) * price_eur
 
     gain_loss = current_value - total_net_invested
@@ -852,13 +969,24 @@ def get_portfolio_valuation_history(db: Session = Depends(get_db)):
     for stock_id in price_by_stock:
         price_by_stock[stock_id].sort(key=lambda x: x[0])
 
-    # Pre-compute exchange rates by stock (most recent rate from transactions)
+    # Pre-compute exchange rates by stock (most recent rate from transactions).
+    # This is a best-effort fallback — DEGIRO records `exchange_rate` only on
+    # foreign-currency trades, and the value reflects the rate AT TRADE TIME,
+    # which can be stale for valuation. We fall back to the current FX rate
+    # (per `_get_fallback_rate`) when no per-stock rate is available, so
+    # currencies like CHF/JPY/PLN/BGN don't get silently treated as EUR.
     exchange_rates_by_stock = {}
     for stock_id, trans_list in trans_by_stock.items():
         for t in reversed(trans_list):
             if t.exchange_rate:
                 exchange_rates_by_stock[stock_id] = t.exchange_rate
                 break
+
+    # Detect percent-of-face quotes (bonds): DEGIRO records bond prices as
+    # 103.49 (meaning 103.49% of par); without this scale a 1000-unit bond
+    # at price 103.49 would inflate the portfolio by 100× (€103,490 instead
+    # of €1,034.90).
+    price_scale_by_stock = _compute_price_scales(db, current_stock_ids)
 
     # Build transaction events sorted by date for incremental calculation
     # Each event: (date, stock_id, quantity_delta, invested_delta)
@@ -911,15 +1039,23 @@ def get_portfolio_valuation_history(db: Session = Depends(get_db)):
             if price_close is None:
                 continue
 
-            # Convert to EUR if needed
-            if price_currency == 'EUR':
-                price_eur = price_close
+            # Scale percent-of-face quotes (bonds) to per-unit value.
+            scaled_price = price_close * price_scale_by_stock.get(stock_id, 1.0)
+
+            # Convert to EUR if needed. Prefer the DEGIRO per-stock exchange
+            # rate (recorded at trade time) when available; otherwise use the
+            # current FX rate from `_get_fallback_rate` so e.g. JPY prices
+            # are scaled correctly instead of being treated as EUR.
+            if price_currency == 'EUR' or not price_currency:
+                price_eur = scaled_price
             else:
                 exchange_rate = exchange_rates_by_stock.get(stock_id)
                 if exchange_rate:
-                    price_eur = price_close / exchange_rate
+                    # DEGIRO's exchange_rate is stored as local-per-EUR
+                    # (Quantity * Price / Value EUR), so divide.
+                    price_eur = scaled_price / exchange_rate
                 else:
-                    price_eur = price_close  # Fallback
+                    price_eur = scaled_price * _get_fallback_rate(price_currency)
 
             total_value_eur += holdings * price_eur
 

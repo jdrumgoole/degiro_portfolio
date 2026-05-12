@@ -67,6 +67,46 @@ def test_holdings_structure(client):
         assert "transactions_count" in holding
 
 
+def test_compute_price_scales_detects_bond_percent_quoting(test_database):
+    """Bonds in DEGIRO are quoted as percent-of-face (price=103.49 for a
+    bond at 103.49% of par). _compute_price_scales must return 0.01 for
+    such stocks so 1000-unit holdings priced at 103.49 don't inflate the
+    portfolio by 100×."""
+    from degiro_portfolio.main import _compute_price_scales
+    from degiro_portfolio.database import SessionLocal, Stock, Transaction
+    from datetime import datetime
+
+    db = SessionLocal()
+    try:
+        # Real-shape bond transaction: 1000 units at price=103.49% paid €1097.30
+        bond = Stock(name="TEST BOND 5%", symbol="TBND", isin="TEST_BOND_00001",
+                     currency="EUR", exchange="AMS")
+        db.add(bond); db.flush()
+        db.add(Transaction(stock_id=bond.id, date=datetime(2025, 1, 1),
+                           quantity=1000, price=103.49, value_eur=-1097.30,
+                           total_eur=-1097.30, currency="EUR"))
+
+        # Normal stock: 100 shares at €50 each = €5000
+        stock = Stock(name="TEST STOCK", symbol="TSTK", isin="TEST_STOCK_0001",
+                      currency="EUR", exchange="AMS")
+        db.add(stock); db.flush()
+        db.add(Transaction(stock_id=stock.id, date=datetime(2025, 1, 1),
+                           quantity=100, price=50.0, value_eur=-5000.0,
+                           total_eur=-5000.0, currency="EUR"))
+        db.commit()
+
+        scales = _compute_price_scales(db, {bond.id, stock.id})
+        assert scales[bond.id] == 0.01, "bond percent-of-face quote not detected"
+        assert scales[stock.id] == 1.0, "normal stock incorrectly scaled"
+
+        # Cleanup
+        db.query(Transaction).filter(Transaction.stock_id.in_([bond.id, stock.id])).delete(synchronize_session=False)
+        db.query(Stock).filter(Stock.id.in_([bond.id, stock.id])).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+
+
 def test_holdings_endpoint_ignores_null_close_rows(client, test_database):
     """A NULL-close StockPrice at the latest date must not mask the previous valid close.
 
@@ -361,11 +401,38 @@ def test_get_fallback_rate_known_currencies():
 
 
 def test_get_fallback_rate_unknown_currency():
-    """Test fallback for unknown currency returns 1.0."""
+    """EUR returns 1.0; truly unknown currencies also return 1.0 (last resort)."""
     from degiro_portfolio.main import _get_fallback_rate
 
-    assert _get_fallback_rate("JPY") == 1.0
     assert _get_fallback_rate("EUR") == 1.0
+    assert _get_fallback_rate("XYZ") == 1.0  # made-up currency, no entry → 1.0
+
+
+def test_get_fallback_rate_gbx_is_gbp_over_100():
+    """British pence (GBp / GBX) must be ~1/100 of GBP. Yahoo's `GBXEUR=X`
+    bogusly returns the full GBP rate, so we rely on the static fallback
+    here. Regression for the May 12 3I GROUP spike (2437 GBX × 30 shares
+    inflated the portfolio by ~€72k when treated as GBP)."""
+    from degiro_portfolio.main import _get_fallback_rate
+    gbp = _get_fallback_rate("GBP")
+    for pence_alias in ("GBp", "GBX"):
+        rate = _get_fallback_rate(pence_alias)
+        assert abs(rate * 100 - gbp) < 0.05, (
+            f"{pence_alias} fallback ({rate}) should be ~GBP/100 ({gbp/100:.4f})"
+        )
+
+
+def test_get_fallback_rate_extended_currencies():
+    """Major non-EUR currencies must have a real fallback rate — a missing
+    entry would silently inflate portfolio totals (e.g. 1599 JPY treated as
+    €1599 per share). Regression for the May 12 valuation spike."""
+    from degiro_portfolio.main import _get_fallback_rate
+
+    # Currencies the test portfolio uses
+    for ccy in ("CHF", "JPY", "PLN", "BGN", "NOK", "DKK", "CAD", "AUD"):
+        rate = _get_fallback_rate(ccy)
+        assert rate != 1.0, f"{ccy} has no real fallback rate — spike risk"
+        assert 0 < rate < 10, f"{ccy} fallback rate {rate} is implausible"
 
 
 def test_exchange_rates_endpoint(client, mocker):

@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.11] - 2026-05-12
+
+### Fixed
+- **Portfolio total inflated 5× by missing FX rates**: a portfolio holding CHF, JPY, PLN, or BGN positions saw its total spike to absurd values (e.g. €651k for a €125k portfolio) the moment Yahoo's exchange-rate cache lacked an entry for those currencies. `_get_fallback_rate` previously only knew USD/GBP/SEK and returned `1.0` for everything else — treating the foreign price as if it were already EUR (a 1599 JPY share inflated to €1599). Replaced the 3-currency hardcoded list with a dynamic discovery from `Stock.currency` / `StockPrice.currency` and a 35-currency static fallback table covering Europe, Asia/Pacific, the Americas, and the Middle East/Africa.
+- **3I GROUP and other London-pence stocks counted as full GBP**: yfinance reports London listings with currency `GBp` or `GBX` (British pence). `GBXEUR=X` on Yahoo Finance is a broken alias that returns the GBP rate (off by 100×). Pence aliases are now derived as `GBP / 100` explicitly and cached under both spellings.
+- **Bonds inflating portfolio value 100×**: DEGIRO quotes bond prices as percent-of-face (a Dutch government bond at price 103.49 means 103.49% of par); `1000 units × 103.49` was being summed as €103,490 instead of €1,034.90. New `_compute_price_scales` infers a 0.01 scale factor per stock by comparing `quantity × price` to `value_eur` in transactions, and is applied in both `/api/portfolio-summary` and `/api/portfolio-valuation-history`.
+- **Library-level INFO log spam**: app modules (`ticker_resolver`, `fetch_prices`, `import_data`, `database`) emit `logger.info(...)` for per-ISIN resolutions, import progress, etc. Uvicorn defaults to INFO log level which surfaced all of these in the user's console. Set the `degiro_portfolio` and `src.degiro_portfolio` loggers to WARNING at app import time (overridable via `DEGIRO_LOG_LEVEL` env var). Uvicorn's own startup lines are unaffected.
+
+### Testing
+- **260 tests total** (+2): regression for `_get_fallback_rate` on extended currencies (CHF/JPY/PLN/BGN/etc. must NOT return 1.0), pence-alias derivation (GBp/GBX = GBP/100), and `_compute_price_scales` correctly classifying a bond (1000 units at 103.49% paying €1097) as 0.01 scale while a normal stock keeps 1.0.
+
 ## [0.5.10] - 2026-05-12
 
 ### Added
